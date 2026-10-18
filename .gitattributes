@@ -1,0 +1,14 @@
+# Normalise line endings in the repository to LF, and check out whatever is native.
+# Without this, a commit from Windows and one from macOS rewrite every line of a file and
+# the real change disappears into the noise.
+* text=auto eol=lf
+
+# Binary: never touch these.
+*.db binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
+
+# Generated; collapse it in diffs and reviews.
+package-lock.json linguist-generated=true -diff

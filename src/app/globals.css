@@ -1,0 +1,375 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens. Light is the base; the dark block only re-points the tokens,
+   so no component ever needs to know which theme it is in.
+--------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+
+  --bg: #f6f7fb;
+  --bg-elevated: #ffffff;
+  --bg-sunken: #eef0f6;
+  --bg-hover: #f1f3f9;
+
+  --text: #12141c;
+  --text-muted: #5b6172;
+  --text-faint: #8b90a0;
+
+  --border: #e2e5ee;
+  --border-strong: #cfd4e2;
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef2ff;
+  --accent-text: #ffffff;
+
+  --credit: #047857; /* money owed TO you */
+  --credit-soft: #ecfdf5;
+  --debit: #be123c; /* money YOU owe */
+  --debit-soft: #fff1f2;
+  --neutral-soft: #eef0f6;
+
+  /* Chart marks, validated against the chart surface for lightness, chroma and contrast.
+     The income/expense pair is separated by POSITION in the chart rather than by hue,
+     because green-vs-red alone is not distinguishable under red-green colour blindness. */
+  --chart-in: #047857;
+  --chart-out: #be123c;
+  --chart-seq: #4f46e5;
+
+  --shadow-sm: 0 1px 2px rgb(16 18 28 / 0.06), 0 1px 3px rgb(16 18 28 / 0.04);
+  --shadow-md: 0 4px 12px rgb(16 18 28 / 0.07), 0 2px 4px rgb(16 18 28 / 0.04);
+  --shadow-lg: 0 12px 32px rgb(16 18 28 / 0.12), 0 4px 8px rgb(16 18 28 / 0.06);
+
+  --c-indigo-bg: #e0e7ff;
+  --c-indigo-fg: #4f46e5;
+  --c-emerald-bg: #d1fae5;
+  --c-emerald-fg: #059669;
+  --c-amber-bg: #fef3c7;
+  --c-amber-fg: #b45309;
+  --c-rose-bg: #ffe4e6;
+  --c-rose-fg: #e11d48;
+  --c-sky-bg: #e0f2fe;
+  --c-sky-fg: #0284c7;
+  --c-violet-bg: #ede9fe;
+  --c-violet-fg: #7c3aed;
+  --c-teal-bg: #ccfbf1;
+  --c-teal-fg: #0d9488;
+  --c-orange-bg: #ffedd5;
+  --c-orange-fg: #ea580c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #0c0d12;
+    --bg-elevated: #16181f;
+    --bg-sunken: #101219;
+    --bg-hover: #1d2029;
+
+    --text: #eceef5;
+    --text-muted: #9aa0b2;
+    --text-faint: #6b7284;
+
+    --border: #252833;
+    --border-strong: #343846;
+
+    --accent: #7c7cf9;
+    --accent-hover: #9090ff;
+    --accent-soft: #1d1f3a;
+    --accent-text: #0c0d12;
+
+    --credit: #34d399;
+    --credit-soft: #0c2a22;
+    --debit: #fb7185;
+    --debit-soft: #2c1218;
+    --neutral-soft: #1d2029;
+
+    --chart-in: #0d9f78;
+    --chart-out: #e8496a;
+    --chart-seq: #7c7cf9;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
+    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+
+    --c-indigo-bg: #262a52;
+    --c-indigo-fg: #a5b4fc;
+    --c-emerald-bg: #0d3a2c;
+    --c-emerald-fg: #6ee7b7;
+    --c-amber-bg: #422c09;
+    --c-amber-fg: #fcd34d;
+    --c-rose-bg: #45161f;
+    --c-rose-fg: #fda4af;
+    --c-sky-bg: #0c2f45;
+    --c-sky-fg: #7dd3fc;
+    --c-violet-bg: #2e2154;
+    --c-violet-fg: #c4b5fd;
+    --c-teal-bg: #0b3733;
+    --c-teal-fg: #5eead4;
+    --c-orange-bg: #431f0b;
+    --c-orange-fg: #fdba74;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--bg-elevated);
+  --color-sunken: var(--bg-sunken);
+  --color-hover: var(--bg-hover);
+  --color-ink: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-credit: var(--credit);
+  --color-credit-soft: var(--credit-soft);
+  --color-debit: var(--debit);
+  --color-debit-soft: var(--debit-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------------------
+   Component primitives.
+
+   Inside @layer components deliberately. Unlayered rules beat layered ones in the
+   cascade whatever the source order, so leaving these outside a layer made them win
+   against every Tailwind utility — `sm:hidden` could not hide a .label, and `pl-7`
+   could not make room for the rupee sign inside an .input. Tailwind orders components
+   before utilities, so in here the markup gets the last word, which is the point of
+   writing a utility next to a component class at all.
+--------------------------------------------------------------------------- */
+@layer components {
+  /* Tabular figures everywhere money is shown, so columns of numbers line up. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  /* ---------------------------------------------------------------------------
+     Component primitives
+  --------------------------------------------------------------------------- */
+
+  .card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    border-radius: 10px;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.875rem;
+    font-weight: 550;
+    line-height: 1.25rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease,
+      transform 0.06s ease;
+    white-space: nowrap;
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(0.5px);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+  .btn-secondary {
+    background: var(--bg-elevated);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+  .btn-danger {
+    background: transparent;
+    color: var(--debit);
+    border-color: var(--border-strong);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: var(--debit-soft);
+    border-color: var(--debit);
+  }
+  .btn-sm {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8125rem;
+    border-radius: 8px;
+  }
+
+  .input,
+  .select,
+  .textarea {
+    width: 100%;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.9375rem;
+    color: var(--text);
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  }
+  .input::placeholder,
+  .textarea::placeholder {
+    color: var(--text-faint);
+  }
+  .input:focus,
+  .select:focus,
+  .textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .select {
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-faint) 50%),
+      linear-gradient(135deg, var(--text-faint) 50%, transparent 50%);
+    background-position: calc(100% - 18px) 52%, calc(100% - 13px) 52%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2rem;
+  }
+  .textarea {
+    resize: vertical;
+    min-height: 4.5rem;
+  }
+  .label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 550;
+    color: var(--text-muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 550;
+    background: var(--neutral-soft);
+    color: var(--text-muted);
+  }
+
+  .seg {
+    display: inline-flex;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    padding: 3px;
+    gap: 3px;
+  }
+  .seg-item {
+    padding: 0.4rem 0.85rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 550;
+    color: var(--text-muted);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    transition: background-color 0.12s ease, color 0.12s ease;
+    white-space: nowrap;
+  }
+  .seg-item:hover {
+    color: var(--text);
+  }
+  .seg-item[data-active="true"] {
+    background: var(--bg-elevated);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .divide-line > * + * {
+    border-top: 1px solid var(--border);
+  }
+
+
+  /* -------------------------------------------------------------------------
+     Long lists.
+
+     `content-visibility: auto` lets the browser skip layout and paint for rows
+     that are off screen, and pick them up again as they scroll in. That is the
+     expensive part of a long list; the elements themselves cost little.
+
+     This is done in CSS rather than with a windowing library on purpose. The
+     transactions page is a server component, so its rows arrive as HTML — a
+     JavaScript virtualiser would mean shipping the entries as JSON instead,
+     rendering them on the client, and giving up find-in-page, because rows it
+     has not rendered are not in the document at all. The browser keeps them in
+     the document and simply does not draw them.
+
+     `contain-intrinsic-size` is the height to assume for a row that has not
+     been drawn yet. Without it the scrollbar jumps about as rows are measured;
+     it wants to be close to the real height, which is 61px for a row at the
+     default font size.
+  ------------------------------------------------------------------------- */
+  .list-long > * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 61px;
+  }
+
+  .link {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .link:hover {
+    text-decoration: underline;
+  }
+}
+
+/* Scrollbars that do not fight the dark theme */
+@supports selector(::-webkit-scrollbar) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 999px;
+    border: 2px solid var(--bg);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

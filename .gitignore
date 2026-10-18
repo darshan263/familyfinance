@@ -1,0 +1,20 @@
+node_modules/
+.next/
+out/
+build/
+*.log
+.env
+.env.local
+prisma/*.db
+prisma/*.db-journal
+.DS_Store
+next-env.d.ts
+*.tsbuildinfo
+
+# Backups made before a schema change or a secret rotation: full copies of the household's
+# finances and of the signing secret, so they must never be committed.
+*.bak
+*.bak-*
+
+# Generated production secrets, never committed.
+.deploy-secrets.local.txt

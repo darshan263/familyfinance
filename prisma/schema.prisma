@@ -1,0 +1,163 @@
+// FamilyFinance — household money tracker.
+//
+// Every rupee lives in an Account. A Transaction moves money into, out of, or between
+// accounts; what each kind does to which balance is decided in one place, `signedEffects` in
+// lib/txn.ts. Investment and liability accounts also carry Valuations: what the holding is
+// actually worth (or actually owed) on a date, as opposed to what went into it.
+//
+// Money columns are integer paise (BigInt). See lib/money.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Serverless opens a connection per function instance, which exhausts a Postgres server
+  // quickly. DATABASE_URL must be the *pooled* endpoint your provider gives you.
+  url = env("DATABASE_URL")
+  // Schema changes need a connection that passes DDL through: `prisma db push` and `migrate`
+  // do things a transaction pooler will not. On Supabase use the session pooler (port 5432).
+  directUrl = env("DIRECT_URL")
+}
+
+/// The one login. Whoever holds it manages everything; household members are only tags.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  /// Bumped whenever the password changes. The session token carries the value it was signed
+  /// with, so bumping it signs every existing session out.
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
+}
+
+/// A person in the household. Cannot sign in; exists so entries and accounts can say whose
+/// they are. An entry with no member is Shared.
+model Member {
+  id        String   @id @default(cuid())
+  name      String
+  /// Palette key, see lib/colors.ts
+  color     String   @default("indigo")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  transactions Transaction[]
+  accounts     Account[]
+}
+
+model Account {
+  id                  String    @id @default(cuid())
+  name                String
+  /// One of ACCOUNT_TYPES in lib/accounts.ts. The type decides the group (liquid,
+  /// investment, liability), which is derived rather than stored so the two cannot disagree.
+  type                String
+  institution         String?
+  /// Null means joint / the whole household.
+  ownerMemberId       String?
+  /// Signed, from the household's point of view: an asset is positive, money owed (credit
+  /// card, loan) is negative. The forms take "amount owed" as a positive number and flip it.
+  openingBalanceCents BigInt    @default(0)
+  openingDate         DateTime
+  notes               String?
+  isActive            Boolean   @default(true)
+  sort                Int       @default(0)
+  createdAt           DateTime  @default(now())
+
+  owner         Member?       @relation(fields: [ownerMemberId], references: [id], onDelete: SetNull)
+  transactions  Transaction[] @relation("FromAccount")
+  transfersIn   Transaction[] @relation("ToAccount")
+  valuations    Valuation[]
+}
+
+model Category {
+  id       String  @id @default(cuid())
+  name     String
+  /// EXPENSE | INCOME
+  kind     String
+  sort     Int     @default(0)
+  /// Archived categories stay on old entries but are not offered for new ones.
+  isActive Boolean @default(true)
+
+  transactions Transaction[]
+
+  @@unique([name, kind])
+}
+
+model Transaction {
+  id          String    @id @default(cuid())
+  /// EXPENSE | INCOME | TRANSFER | ADJUSTMENT
+  kind        String
+  /// Paise. Positive for every kind except ADJUSTMENT, where the sign is the direction of
+  /// the correction.
+  amountCents BigInt
+  date        DateTime
+  description String
+  notes       String?
+  /// EXPENSE: paid from. INCOME: received into. TRANSFER: from. ADJUSTMENT: the account corrected.
+  accountId   String
+  /// TRANSFER only: where the money went.
+  toAccountId String?
+  /// EXPENSE and INCOME only.
+  categoryId  String?
+  /// Whose entry this is. Null means Shared.
+  memberId    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  /// Soft delete: a deleted entry drops out of every balance and report but is kept.
+  deletedAt   DateTime?
+
+  account   Account   @relation("FromAccount", fields: [accountId], references: [id])
+  toAccount Account?  @relation("ToAccount", fields: [toAccountId], references: [id])
+  category  Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  member    Member?   @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@index([date])
+  @@index([deletedAt])
+  @@index([accountId])
+  @@index([toAccountId])
+}
+
+/// What an investment is worth, or a liability is owed, on a date. Same sign convention as
+/// the account's opening balance. A valuation is taken to include every entry dated on or
+/// before its own date.
+model Valuation {
+  id         String   @id @default(cuid())
+  accountId  String
+  date       DateTime
+  valueCents BigInt
+  note       String?
+  createdAt  DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, date])
+}
+
+/// Audit trail of changes. There is only one login, so it records what, not who.
+model Activity {
+  id        String   @id @default(cuid())
+  /// CREATE | UPDATE | DELETE | ACCOUNT | VALUATION | MEMBER | CATEGORY | AUTH | SETTINGS
+  action    String
+  summary   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+/// One fixed window of the sign-in throttle. In the database rather than in memory because
+/// serverless gives every function instance its own memory and throws instances away — an
+/// in-process counter there throttles nobody. See lib/rate-limit.ts.
+model RateLimit {
+  key     String   @id
+  count   Int      @default(0)
+  /// When this window stops counting. Rows past this are dead and get cleaned up lazily.
+  resetAt DateTime
+
+  @@index([resetAt])
+}

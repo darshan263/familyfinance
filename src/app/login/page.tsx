@@ -1,0 +1,41 @@
+import { redirect } from "next/navigation";
+
+import { safeNext } from "@/lib/auth";
+import { getHouseholdName } from "@/lib/queries";
+import { getCurrentUser, needsSetup } from "@/lib/session";
+import { LoginForm } from "./LoginForm";
+
+export const dynamic = "force-dynamic";
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  if (await needsSetup()) redirect("/setup");
+  if (await getCurrentUser()) redirect("/");
+
+  const { next } = await searchParams;
+  const householdName = await getHouseholdName();
+
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4 py-10">
+      <div className="w-full max-w-sm">
+        <header className="mb-6 text-center">
+          <span
+            className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl text-xl font-bold"
+            style={{ background: "var(--accent)", color: "var(--accent-text)" }}
+          >
+            ₹
+          </span>
+          <h1 className="text-xl font-semibold tracking-tight">{householdName}</h1>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            Sign in to FamilyFinance
+          </p>
+        </header>
+
+        <LoginForm next={safeNext(next)} />
+      </div>
+    </div>
+  );
+}
