@@ -18,3 +18,7 @@ next-env.d.ts
 
 # Generated production secrets, never committed.
 .deploy-secrets.local.txt
+
+.vercel
+.env*
+!.env.example
