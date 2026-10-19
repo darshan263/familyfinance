@@ -51,7 +51,7 @@ export default async function AccountsPage() {
     <div>
       <PageHeader
         title="Accounts"
-        subtitle="Where the household's money is, what it is worth, and what is owed."
+        subtitle="Bank accounts, cash, credit cards and loans. Investments have their own section."
         actions={
           <Link href="/accounts/new" className="btn btn-primary">
             <IconPlus size={16} />
@@ -67,18 +67,14 @@ export default async function AccountsPage() {
         <Stat label="Bank & cash">
           <Money cents={netWorth.liquid} />
         </Stat>
-        <Stat
-          label="Investments"
-          hint={
-            netWorth.investedCost !== netWorth.investments ? (
-              <>
-                put in <Money cents={netWorth.investedCost} />
-              </>
-            ) : undefined
-          }
-        >
-          <Money cents={netWorth.investments} />
-        </Stat>
+        <Link href="/investments" className="block rounded-[var(--radius-card)] transition-shadow hover:shadow-[var(--shadow-md)]">
+          <Stat
+            label="Investments"
+            hint={<span className="link">See investments →</span>}
+          >
+            <Money cents={netWorth.investments} />
+          </Stat>
+        </Link>
         <Stat label="Owed (cards & loans)">
           <Money cents={-netWorth.liabilities} />
         </Stat>
@@ -86,12 +82,12 @@ export default async function AccountsPage() {
 
       {accounts.length === 0 && (
         <div className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
-          No accounts yet. Add your bank accounts, cash, investments and any cards or loans.
+          No accounts yet. Add your bank accounts, cash, and any cards or loans.
         </div>
       )}
 
       <div className="flex flex-col gap-6">
-        {ACCOUNT_GROUPS.map((group) => {
+        {ACCOUNT_GROUPS.filter((g) => g !== "INVESTMENT").map((group) => {
           const list = accounts.filter((a) => accountGroup(a.type) === group);
           if (list.length === 0) return null;
           const total = list.reduce((s, a) => s + (positions.get(a.id)?.current ?? 0), 0);

@@ -40,6 +40,8 @@ import {
 import { csvCell, toCsv } from "../src/lib/csv";
 import { endOfDay, monthsBetween, parseDay } from "../src/lib/date";
 import { SHARED, whereFromFilter } from "../src/lib/filters";
+import { moneyField } from "../src/lib/forms";
+import { accountPath, INVESTMENT_TYPES, pickFundingAccount, summariseInvestments } from "../src/lib/investments";
 import { formatMoney, MAX_AMOUNT_CENTS, parseAmount, sumToPaise, toPaise } from "../src/lib/money";
 import { fyLabel, fyStartYear, periodBounds, resolvePeriod } from "../src/lib/period";
 import { DEFAULT_RANGE, rangeBounds, resolveRange } from "../src/lib/range";
@@ -409,6 +411,75 @@ test("a balance adjustment is the gap to the bank's figure at the end of that da
     -rupees(52_000),
     "an overdrawn account can be adjusted to a negative balance",
   );
+});
+
+// --------------------------------------------------------------------------------------
+section("Investments");
+
+const bank = (id: string, isActive = true) => ({ id, type: "SAVINGS", isActive });
+
+test("investing defaults to the account the last investment came from", () => {
+  const accounts = [bank("hdfc"), bank("sbi"), { id: "mf", type: "MUTUAL_FUND", isActive: true }];
+  assert.equal(pickFundingAccount(accounts, "sbi"), "sbi");
+});
+
+test("…otherwise the first open bank or cash account, never a closed one or an investment", () => {
+  const accounts = [
+    { id: "mf", type: "MUTUAL_FUND", isActive: true },
+    bank("old", false),
+    { id: "card", type: "CREDIT_CARD", isActive: true },
+    bank("hdfc"),
+  ];
+  assert.equal(pickFundingAccount(accounts, null), "hdfc");
+  assert.equal(pickFundingAccount(accounts, "old"), "hdfc", "last used, but closed since");
+  assert.equal(pickFundingAccount(accounts, "mf"), "hdfc", "money does not come from another fund");
+  assert.equal(pickFundingAccount([{ id: "mf", type: "MUTUAL_FUND", isActive: true }], null), null);
+});
+
+test("an existing holding deducts nothing; investing more moves money and keeps net worth", () => {
+  // Added as "already held": opening = invested so far, valued on the same day.
+  const held: AccountLite = { id: "ppfas", type: "MUTUAL_FUND", openingBalanceCents: rupees(2_00_000), openingDate: day("2026-06-01") };
+  const accounts = [SAVINGS, held];
+  const valuations = [val("ppfas", "2026-06-01", rupees(2_30_000))];
+  const before = sumNetWorth(accounts, computePositions(accounts, [], valuations, NOW));
+  assert.equal(computePositions(accounts, [], valuations, NOW).get("sav")!.book, rupees(50_000), "the bank is untouched");
+  assert.equal(before.total, rupees(50_000 + 2_30_000));
+
+  const sip = transfer("sip", "sav", "ppfas", 10_000, "2026-07-05");
+  const positions = computePositions(accounts, [sip], valuations, NOW);
+  assert.equal(positions.get("sav")!.book, rupees(40_000), "the SIP came out of the bank");
+  assert.equal(positions.get("ppfas")!.current, rupees(2_40_000), "and went into the fund on top of its value");
+  assert.equal(sumNetWorth(accounts, positions).total, before.total, "investing does not change net worth");
+});
+
+test("the investments summary adds up, with gain as a share of what went in", () => {
+  const fd: AccountLite = { id: "fd", type: "FD", openingBalanceCents: rupees(1_00_000), openingDate: day("2026-01-01") };
+  const accounts = [SAVINGS, FUND, fd];
+  const positions = computePositions(accounts, [], [val("mf", "2026-06-30", rupees(1_20_000))], NOW);
+  const s = summariseInvestments(accounts, positions);
+  assert.equal(s.count, 2, "the savings account is not an investment");
+  assert.equal(s.invested, rupees(2_00_000));
+  assert.equal(s.current, rupees(2_20_000));
+  assert.equal(s.gain, rupees(20_000));
+  assert.equal(s.gainRatio, 0.1);
+  assert.deepEqual(s.byType.map((t) => t.label), ["Mutual fund", "Fixed deposit"], "largest first");
+});
+
+test("investments have their own pages; other accounts keep theirs", () => {
+  assert.equal(accountPath({ id: "x", type: "PPF" }), "/investments/x");
+  assert.equal(accountPath({ id: "y", type: "SAVINGS" }), "/accounts/y");
+  assert.equal(accountPath({ id: "z", type: "LOAN" }), "/accounts/z");
+  assert.ok(INVESTMENT_TYPES.includes("GOLD") && !INVESTMENT_TYPES.includes("SAVINGS" as never));
+});
+
+test("money moved into an investment must be more than zero; a value may be blank only where optional", () => {
+  const positive = moneyField("The amount", { positive: true });
+  assert.equal(positive.safeParse("0").success, false);
+  assert.equal(positive.safeParse("").success, false);
+  assert.equal(positive.safeParse("1,500").data, 150000);
+  const optional = moneyField("The current value");
+  assert.equal(optional.safeParse("").data, 0, "blank current value means none given");
+  assert.equal(optional.safeParse("-5").success, false);
 });
 
 // --------------------------------------------------------------------------------------

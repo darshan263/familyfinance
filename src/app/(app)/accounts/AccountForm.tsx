@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 
-import { accountGroup, ACCOUNT_GROUPS, ACCOUNT_TYPES, GROUP_LABELS } from "@/lib/accounts";
+import { accountGroup, ACCOUNT_GROUPS, ACCOUNT_TYPES, GROUP_LABELS, type AccountGroup } from "@/lib/accounts";
 import { saveAccount, type FormState } from "./actions";
 
 export interface AccountInitial {
@@ -29,14 +29,17 @@ export function AccountForm({
   initial,
   members,
   today,
+  groups = ACCOUNT_GROUPS,
 }: {
   initial?: AccountInitial;
   members: { id: string; name: string }[];
   today: string;
+  /** The kinds of account offered. Investments are added from the Investments section. */
+  groups?: readonly AccountGroup[];
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(saveAccount, {});
   const [name, setName] = useState(initial?.name ?? "");
-  const [type, setType] = useState(initial?.type ?? "SAVINGS");
+  const [type, setType] = useState(initial?.type ?? ACCOUNT_TYPES.find((t) => groups.includes(t.group))!.key);
   const [institution, setInstitution] = useState(initial?.institution ?? "");
   const [ownerMemberId, setOwner] = useState(initial?.ownerMemberId ?? "");
   const [opening, setOpening] = useState(initial?.opening ?? "");
@@ -71,7 +74,7 @@ export function AccountForm({
             Type
           </label>
           <select id="type" name="type" className="select" value={type} onChange={(e) => setType(e.target.value)}>
-            {ACCOUNT_GROUPS.map((g) => (
+            {groups.map((g) => (
               <optgroup key={g} label={GROUP_LABELS[g]}>
                 {ACCOUNT_TYPES.filter((t) => t.group === g).map((t) => (
                   <option key={t.key} value={t.key}>

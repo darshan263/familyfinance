@@ -11,6 +11,7 @@ import {
 import { endOfDay } from "./date";
 import { prisma } from "./db";
 import { whereFromFilter, type TxnFilter } from "./filters";
+import { INVESTMENT_TYPES, pickFundingAccount } from "./investments";
 import { sumToPaise } from "./money";
 
 export const SETTING_KEYS = {
@@ -204,6 +205,19 @@ export async function monthlyIncomeExpense(months: { start: Date; end: Date }[])
     select: { kind: true, amountCents: true, date: true },
   });
   return bucketMonthly(rows, months);
+}
+
+/** The account the next investment is paid from by default; see `pickFundingAccount`. */
+export async function getDefaultFundingAccountId(): Promise<string | null> {
+  const [accounts, last] = await Promise.all([
+    getAccounts(),
+    prisma.transaction.findFirst({
+      where: { kind: "TRANSFER", deletedAt: null, toAccount: { type: { in: INVESTMENT_TYPES } } },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      select: { accountId: true },
+    }),
+  ]);
+  return pickFundingAccount(accounts, last?.accountId ?? null);
 }
 
 export async function getEarliestEntryDate(): Promise<Date | null> {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { IconTrash } from "@/components/Icons";
 import { Money } from "@/components/Money";
@@ -10,6 +10,7 @@ import { accountGroup, accountTypeLabel, takesValuations, toEnteredBalance } fro
 import { computePositions, gainPercent, runningBalances } from "@/lib/balances";
 import { endOfDay, formatDate, toDateInput } from "@/lib/date";
 import { prisma } from "@/lib/db";
+import { isInvestment } from "@/lib/investments";
 import { centsToInput, formatMoney } from "@/lib/money";
 import { getMembers } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
@@ -42,6 +43,14 @@ export default async function AccountPage({
     include: { owner: true, valuations: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] } },
   });
   if (!account) notFound();
+  // Investments have their own page now. Old links (and actions that still land here, such
+  // as removing a value update that was already gone) are forwarded with their outcome.
+  if (isInvestment(account.type)) {
+    const query = new URLSearchParams(
+      Object.entries(sp).filter((e): e is [string, string] => typeof e[1] === "string"),
+    ).toString();
+    redirect(`/investments/${id}${query ? `?${query}` : ""}`);
+  }
 
   const [txns, members] = await Promise.all([
     prisma.transaction.findMany({
@@ -217,6 +226,7 @@ export default async function AccountPage({
         <summary className="cursor-pointer text-base font-semibold">Edit account</summary>
         <div className="mt-4">
           <AccountForm
+            groups={["LIQUID", "LIABILITY"]}
             members={members.map((m) => ({ id: m.id, name: m.name }))}
             today={today}
             initial={{

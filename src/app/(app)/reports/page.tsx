@@ -164,7 +164,10 @@ export default async function ReportsPage({
         <div className="mb-2 px-1">
           <h2 className="text-lg">Investments today</h2>
           <p className="text-xs" style={{ color: "var(--text-faint)" }}>
-            As of today, whatever period is picked above.
+            As of today, whatever period is picked above.{" "}
+            <Link className="link" href="/investments">
+              Open Investments
+            </Link>
           </p>
         </div>
         <div className="card overflow-x-auto">
@@ -190,7 +193,7 @@ export default async function ReportsPage({
                   return (
                     <tr key={a.id}>
                       <td className="px-4 py-2.5">
-                        <Link className="link" href={`/accounts/${a.id}`}>
+                        <Link className="link" href={`/investments/${a.id}`}>
                           {a.name}
                         </Link>
                         <span className="block text-xs" style={{ color: "var(--text-faint)" }}>

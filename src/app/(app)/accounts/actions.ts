@@ -13,51 +13,16 @@ import {
   toStoredBalance,
 } from "@/lib/accounts";
 import { adjustmentFor, beforeOpening } from "@/lib/balances";
-import { formatDate, parseDay } from "@/lib/date";
+import { formatDate } from "@/lib/date";
+import { accountPath } from "@/lib/investments";
 import { prisma } from "@/lib/db";
-import { formatMoney, MAX_AMOUNT_CENTS, parseAmount, toCents } from "@/lib/money";
+import { dayField, formString, moneyField } from "@/lib/forms";
+import { formatMoney, toCents } from "@/lib/money";
 import { logActivity } from "@/lib/queries";
 import { requireUserToChange } from "@/lib/session";
 
 export interface FormState {
   error?: string;
-}
-
-const day = z.string().transform((value, ctx) => {
-  const date = parseDay(value, "midday");
-  if (!date) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Pick a valid date" });
-    return z.NEVER;
-  }
-  return date;
-});
-
-/**
- * A balance or value as typed. `allowNegative` is for an overdrawn bank account. A blank
- * opening balance reasonably means zero; a blank value update or adjustment is a mistake, not
- * a claim that the account is worth nothing, so those pass `required`.
- */
-function money(label: string, { allowNegative = false, required = false } = {}) {
-  return z.string().transform((value, ctx) => {
-    if (required && value.trim() === "") {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label} is needed` });
-      return z.NEVER;
-    }
-    const cents = value.trim() === "" ? 0 : parseAmount(value);
-    if (cents === null) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label} should be a number, like 25000` });
-      return z.NEVER;
-    }
-    if (!allowNegative && cents < 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label} cannot be negative` });
-      return z.NEVER;
-    }
-    if (Math.abs(cents) > MAX_AMOUNT_CENTS) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label} is too large` });
-      return z.NEVER;
-    }
-    return cents;
-  });
 }
 
 const accountSchema = z.object({
@@ -69,8 +34,8 @@ const accountSchema = z.object({
     .max(60)
     .transform((v) => v || null),
   ownerMemberId: z.string().transform((v) => v || null),
-  opening: money("The opening balance", { allowNegative: true }),
-  openingDate: day,
+  opening: moneyField("The opening balance", { allowNegative: true }),
+  openingDate: dayField,
   notes: z
     .string()
     .trim()
@@ -78,22 +43,17 @@ const accountSchema = z.object({
     .transform((v) => v || null),
 });
 
-const str = (fd: FormData, k: string) => {
-  const v = fd.get(k);
-  return typeof v === "string" ? v : "";
-};
-
 export async function saveAccount(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireUserToChange();
 
   const parsed = accountSchema.safeParse({
-    name: str(formData, "name"),
-    type: str(formData, "type"),
-    institution: str(formData, "institution"),
-    ownerMemberId: str(formData, "ownerMemberId"),
-    opening: str(formData, "opening"),
-    openingDate: str(formData, "openingDate"),
-    notes: str(formData, "notes"),
+    name: formString(formData, "name"),
+    type: formString(formData, "type"),
+    institution: formString(formData, "institution"),
+    ownerMemberId: formString(formData, "ownerMemberId"),
+    opening: formString(formData, "opening"),
+    openingDate: formString(formData, "openingDate"),
+    notes: formString(formData, "notes"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the details" };
   const v = parsed.data;
@@ -121,7 +81,7 @@ export async function saveAccount(_prev: FormState, formData: FormData): Promise
     notes: v.notes,
   };
 
-  const id = str(formData, "accountId");
+  const id = formString(formData, "accountId");
   let savedId: string;
   if (id) {
     const existing = await prisma.account.findUnique({
@@ -159,7 +119,7 @@ export async function saveAccount(_prev: FormState, formData: FormData): Promise
   }
 
   revalidatePath("/", "layout");
-  redirect(`/accounts/${savedId}?saved=1`);
+  redirect(`${accountPath({ id: savedId, type: v.type })}?saved=1`);
 }
 
 /** The date of the earliest live entry or value update on an account, if any. */
@@ -186,8 +146,8 @@ function beforeOpeningMessage(account: { name: string; openingDate: Date }): str
 
 const valuationSchema = z.object({
   accountId: z.string().min(1),
-  date: day,
-  value: money("The value", { required: true }),
+  date: dayField,
+  value: moneyField("The value", { required: true }),
   note: z
     .string()
     .trim()
@@ -200,10 +160,10 @@ export async function addValuation(_prev: FormState, formData: FormData): Promis
   await requireUserToChange();
 
   const parsed = valuationSchema.safeParse({
-    accountId: str(formData, "accountId"),
-    date: str(formData, "date"),
-    value: str(formData, "value"),
-    note: str(formData, "note"),
+    accountId: formString(formData, "accountId"),
+    date: formString(formData, "date"),
+    value: formString(formData, "value"),
+    note: formString(formData, "note"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the details" };
   const v = parsed.data;
@@ -224,13 +184,13 @@ export async function addValuation(_prev: FormState, formData: FormData): Promis
   await logActivity("VALUATION", `updated ${account.name} to ${formatMoney(v.value)}`);
 
   revalidatePath("/", "layout");
-  redirect(`/accounts/${account.id}?valued=1`);
+  redirect(`${accountPath(account)}?valued=1`);
 }
 
 export async function deleteValuation(formData: FormData): Promise<void> {
   await requireUserToChange();
-  const id = str(formData, "valuationId");
-  const accountId = str(formData, "accountId");
+  const id = formString(formData, "valuationId");
+  const accountId = formString(formData, "accountId");
   const existing = id ? await prisma.valuation.findUnique({ where: { id }, include: { account: true } }) : null;
   // Already gone — a double click, or deleted in another tab. Say so rather than reloading
   // the page as if something had happened.
@@ -240,13 +200,13 @@ export async function deleteValuation(formData: FormData): Promise<void> {
   await logActivity("VALUATION", `removed a value update from ${existing.account.name}`);
 
   revalidatePath("/", "layout");
-  redirect(`/accounts/${existing.accountId}?unvalued=1`);
+  redirect(`${accountPath(existing.account)}?unvalued=1`);
 }
 
 const adjustSchema = z.object({
   accountId: z.string().min(1),
-  date: day,
-  balance: money("The balance", { allowNegative: true, required: true }),
+  date: dayField,
+  balance: moneyField("The balance", { allowNegative: true, required: true }),
 });
 
 /**
@@ -258,9 +218,9 @@ export async function adjustBalance(_prev: FormState, formData: FormData): Promi
   await requireUserToChange();
 
   const parsed = adjustSchema.safeParse({
-    accountId: str(formData, "accountId"),
-    date: str(formData, "date"),
-    balance: str(formData, "balance"),
+    accountId: formString(formData, "accountId"),
+    date: formString(formData, "date"),
+    balance: formString(formData, "balance"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the details" };
   const v = parsed.data;

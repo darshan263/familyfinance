@@ -128,7 +128,13 @@ export default async function DashboardPage() {
             ].map((s) => (
               <div key={s.label} className="sm:px-5 sm:first:pl-0">
                 <dt className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  {s.label}
+                  {s.label === "Investments" ? (
+                    <Link className="link" href="/investments">
+                      Investments →
+                    </Link>
+                  ) : (
+                    s.label
+                  )}
                 </dt>
                 <dd className="figure mt-1 text-xl">
                   <Money cents={s.cents} whole />

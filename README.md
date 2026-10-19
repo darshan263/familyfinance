@@ -100,8 +100,14 @@ yesterday until 5:30 am. Set `APP_TIMEZONE` to use another zone.
 - **Transactions**: every entry, with date windows, filters (kind, account, category, member),
   search, and Excel/CSV export of the same window and filters (all matching entries, not just
   the first 500 the page shows; the Excel summary sheet covers the whole window).
-- **Accounts**: grouped balances; each account's page has its history with a running
-  balance, Update value (investments, cards, loans) or Adjust balance (bank, cash), and editing.
+- **Accounts**: bank, cash, cards and loans, grouped, with balances; each account's page has
+  its history with a running balance, Adjust balance (bank, cash) or Update value (cards,
+  loans), and editing.
+- **Investments**: every holding with what went in, what it is worth and the gain, and the
+  split by kind. Add one you **already hold** (what you have put in so far, and today's value
+  if you know it; nothing is taken from any bank account), or one you are **buying now** (paid
+  from a bank account). After that, each holding's page has Invest more and Withdraw, with
+  the bank account preselected (the one the last investment came from), plus Update value.
 - **Reports**: this month, last month, last 12 months, this or last financial year (April to
   March), all time, or any dates. Totals, savings rate, by category and by member, investment
   gains, and export.
