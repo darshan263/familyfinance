@@ -44,7 +44,7 @@ export function NetWorthTrend({ data }: { data: WorthPoint[] }) {
   return (
     <figure className="m-0">
       <figcaption className="mb-1">
-        <h2 className="text-base font-semibold">Net worth</h2>
+        <h2 className="text-lg">Net worth</h2>
         <p className="mt-0.5 text-xs" style={{ color: "var(--text-faint)" }}>
           Month ends, last {data.length} months
         </p>

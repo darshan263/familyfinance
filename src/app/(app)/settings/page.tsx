@@ -55,7 +55,7 @@ export default async function SettingsPage({
       {sp.error && <Notice tone="warn">{ERRORS[sp.error] ?? "That did not work."}</Notice>}
 
       <section className="card p-5">
-        <h2 className="mb-3 text-base font-semibold">Household</h2>
+        <h2 className="mb-3 text-lg">Household</h2>
         <form action={renameHousehold} className="flex flex-wrap gap-2">
           <input name="householdName" className="input min-w-0 flex-1" defaultValue={householdName} maxLength={60} required />
           <button className="btn btn-secondary" type="submit">
@@ -65,7 +65,7 @@ export default async function SettingsPage({
       </section>
 
       <section className="card p-5">
-        <h2 className="text-base font-semibold">Login</h2>
+        <h2 className="text-lg">Login</h2>
         <p className="mt-1 mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
           Signed in as {user.email}. This is the only login, so keep the password somewhere safe.
         </p>
@@ -83,7 +83,7 @@ export default async function SettingsPage({
       </section>
 
       <section className="card p-5">
-        <h2 className="text-base font-semibold">Categories</h2>
+        <h2 className="text-lg">Categories</h2>
         <p className="mt-1 mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
           A category with entries can be archived but not deleted, so past reports stay as they
           were.
@@ -129,7 +129,7 @@ export default async function SettingsPage({
       </section>
 
       <section className="card p-5">
-        <h2 className="text-base font-semibold">Your data</h2>
+        <h2 className="text-lg">Your data</h2>
         <p className="mt-1 mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
           A full export of every entry, with a summary and today&apos;s account positions. Worth
           downloading now and then as a backup of your own; the database provider keeps the
@@ -147,7 +147,7 @@ export default async function SettingsPage({
       </section>
 
       <section className="card p-5">
-        <h2 className="mb-3 text-base font-semibold">Recent changes</h2>
+        <h2 className="mb-3 text-lg">Recent changes</h2>
         {activity.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--text-faint)" }}>
             Nothing yet.

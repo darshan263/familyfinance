@@ -119,7 +119,7 @@ export default async function AccountPage({
       <section className="card mb-6 p-5">
         {takesValuations(account.type) ? (
           <>
-            <h2 className="mb-1 text-base font-semibold">
+            <h2 className="mb-1 text-lg">
               {group === "LIABILITY" ? "Update what is owed" : "Update value"}
             </h2>
             <p className="mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
@@ -161,7 +161,7 @@ export default async function AccountPage({
           </>
         ) : (
           <>
-            <h2 className="mb-1 text-base font-semibold">Adjust balance</h2>
+            <h2 className="mb-1 text-lg">Adjust balance</h2>
             <p className="mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
               If this does not match the bank, enter what the bank shows. The difference is
               recorded as an adjustment, not as income or spending.
@@ -173,7 +173,7 @@ export default async function AccountPage({
 
       <section className="mb-6">
         <div className="mb-2 flex items-baseline justify-between px-1">
-          <h2 className="text-base font-semibold">History</h2>
+          <h2 className="text-lg">History</h2>
           <span className="text-xs" style={{ color: "var(--text-faint)" }}>
             Opening {formatMoney(toEnteredBalance(account.type, account.openingBalanceCents))}
             {group === "LIABILITY" ? " owed" : ""} on {formatDate(account.openingDate)} ·{" "}

@@ -8,11 +8,11 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <header className="mb-7 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-[1.875rem] leading-tight">{title}</h1>
         {subtitle && (
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1.5 text-sm" style={{ color: "var(--text-muted)" }}>
             {subtitle}
           </p>
         )}
@@ -32,13 +32,13 @@ export function Stat({
   hint?: React.ReactNode;
 }) {
   return (
-    <div className="card p-4">
-      <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+    <div className="card p-5">
+      <p className="text-xs font-semibold tracking-wide uppercase" style={{ color: "var(--text-faint)" }}>
         {label}
       </p>
-      <p className="mt-1 text-xl font-semibold tracking-tight">{children}</p>
+      <p className="figure mt-1.5 text-[1.6rem] leading-tight">{children}</p>
       {hint && (
-        <p className="mt-1 text-xs" style={{ color: "var(--text-faint)" }}>
+        <p className="mt-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
           {hint}
         </p>
       )}

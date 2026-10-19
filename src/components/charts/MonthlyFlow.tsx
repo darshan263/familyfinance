@@ -14,10 +14,10 @@ export interface MonthPoint {
  * Money in and money out, month by month.
  *
  * Income rises above the baseline and expense falls below it, so the two series are told
- * apart by POSITION rather than by colour. That matters: the app's green/credit and
- * red/debit pair sits at a CVD separation of ~5 Delta E, well under the safe threshold, so
- * a red-green viewer could not distinguish them on colour alone. Up versus down is
- * unambiguous for everyone, and the colours merely reinforce it.
+ * apart by position as well as colour. The colours are teal and terracotta rather than the
+ * usual green and red, because green against red is close to invisible to red-green colour
+ * blindness; this pair stays about 13 ΔE apart under protan and deutan simulation (checked
+ * with the dataviz palette validator, see globals.css).
  */
 export function MonthlyFlow({
   data,
@@ -46,7 +46,7 @@ export function MonthlyFlow({
     <figure className="m-0">
       <figcaption className="mb-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
         <div>
-          <h2 className="text-base font-semibold">{title}</h2>
+          <h2 className="text-lg">{title}</h2>
           <p className="mt-0.5 text-xs" style={{ color: "var(--text-faint)" }}>
             Last {data.length} months · net{" "}
             <span

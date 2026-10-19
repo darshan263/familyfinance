@@ -15,6 +15,7 @@ import {
   IconWallet,
   IconX,
 } from "./Icons";
+import { Logo } from "./Logo";
 
 const NAV = [
   { href: "/", label: "Dashboard", Icon: IconHome },
@@ -49,14 +50,19 @@ export function AppShell({ householdName, email, children }: Props) {
           <Link
             key={href}
             href={href}
-            className="flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-sm font-medium transition-colors"
+            className="flex items-center gap-3 rounded-full px-3.5 py-2 text-sm transition-colors hover:bg-[var(--bg-hover)]"
             style={{
-              background: active ? "var(--accent-soft)" : "transparent",
-              color: active ? "var(--accent)" : "var(--text-muted)",
+              background: active ? "var(--bg-elevated)" : undefined,
+              color: active ? "var(--text)" : "var(--text-muted)",
+              fontWeight: active ? 600 : 500,
+              boxShadow: active ? "var(--shadow-sm)" : undefined,
             }}
           >
-            <Icon size={17} />
-            {label}
+            <Icon size={17} style={{ color: active ? "var(--accent)" : undefined }} />
+            <span className="flex-1">{label}</span>
+            {active && (
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--warm)" }} />
+            )}
           </Link>
         );
       })}
@@ -64,18 +70,11 @@ export function AppShell({ householdName, email, children }: Props) {
   );
 
   const sidebarBody = (
-    <div className="flex h-full flex-col gap-5 p-4">
-      <Link href="/" className="flex items-center gap-2.5 px-1">
-        <span
-          className="flex h-9 w-9 items-center justify-center rounded-[10px] text-base font-bold"
-          style={{ background: "var(--accent)", color: "var(--accent-text)" }}
-        >
-          ₹
-        </span>
+    <div className="flex h-full flex-col gap-6 p-5">
+      <Link href="/" className="flex items-center gap-3 px-1">
+        <Logo size={40} />
         <span className="min-w-0">
-          <span className="block truncate text-[0.9375rem] leading-tight font-semibold">
-            {householdName}
-          </span>
+          <span className="figure block truncate text-lg leading-tight">{householdName}</span>
           <span className="block text-xs" style={{ color: "var(--text-faint)" }}>
             FamilyFinance
           </span>
@@ -91,8 +90,8 @@ export function AppShell({ householdName, email, children }: Props) {
 
       <div className="mt-auto">
         <div
-          className="flex items-center gap-2.5 rounded-[10px] p-2"
-          style={{ background: "var(--bg-sunken)" }}
+          className="flex items-center gap-2.5 rounded-2xl border p-2"
+          style={{ background: "var(--bg-elevated)" }}
         >
           <span className="min-w-0 flex-1 px-1">
             <span className="block text-xs" style={{ color: "var(--text-faint)" }}>
@@ -114,8 +113,8 @@ export function AppShell({ householdName, email, children }: Props) {
     <div className="min-h-screen lg:flex">
       {/* Desktop sidebar */}
       <aside
-        className="hidden w-60 shrink-0 border-r lg:block"
-        style={{ background: "var(--bg-elevated)" }}
+        className="hidden w-64 shrink-0 border-r lg:block"
+        style={{ background: "var(--bg-sidebar)" }}
       >
         <div className="sticky top-0 h-screen">{sidebarBody}</div>
       </aside>
@@ -123,7 +122,7 @@ export function AppShell({ householdName, email, children }: Props) {
       {/* Mobile top bar */}
       <header
         className="sticky top-0 z-30 flex items-center gap-3 border-b px-4 py-2.5 lg:hidden"
-        style={{ background: "var(--bg-elevated)" }}
+        style={{ background: "color-mix(in srgb, var(--bg-sidebar) 92%, transparent)", backdropFilter: "blur(8px)" }}
       >
         <button
           className="btn btn-ghost btn-sm"
@@ -134,7 +133,8 @@ export function AppShell({ householdName, email, children }: Props) {
             <path d="M4 7h16M4 12h16M4 17h16" />
           </svg>
         </button>
-        <span className="flex-1 truncate text-[0.9375rem] font-semibold">{householdName}</span>
+        <Logo size={30} />
+        <span className="figure flex-1 truncate text-base">{householdName}</span>
         <Link href="/transactions/new" className="btn btn-primary btn-sm">
           <IconPlus size={15} />
           Add
@@ -151,7 +151,7 @@ export function AppShell({ householdName, email, children }: Props) {
           />
           <div
             className="absolute inset-y-0 left-0 w-[17rem] shadow-lg"
-            style={{ background: "var(--bg-elevated)" }}
+            style={{ background: "var(--bg-sidebar)" }}
           >
             <button
               className="btn btn-ghost btn-sm absolute top-3 right-3"

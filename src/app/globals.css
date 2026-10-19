@@ -1,116 +1,130 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Design tokens. Light is the base; the dark block only re-points the tokens,
+   Design tokens — "warm home": a cream page, deep teal as the accent, terracotta
+   as the warm second colour, Fraunces for headings and big figures, DM Sans for
+   everything else. Light is the base; the dark block only re-points the tokens,
    so no component ever needs to know which theme it is in.
 --------------------------------------------------------------------------- */
 
 :root {
   color-scheme: light;
 
-  --bg: #f6f7fb;
-  --bg-elevated: #ffffff;
-  --bg-sunken: #eef0f6;
-  --bg-hover: #f1f3f9;
+  --bg: #faf6ef;
+  --bg-elevated: #fffdf8;
+  --bg-sunken: #f3ede2;
+  --bg-hover: #f1eadd;
+  --bg-sidebar: #f4eee3;
 
-  --text: #12141c;
-  --text-muted: #5b6172;
-  --text-faint: #8b90a0;
+  --text: #1f2a2e;
+  --text-muted: #5b6669;
+  --text-faint: #8a9395;
 
-  --border: #e2e5ee;
-  --border-strong: #cfd4e2;
+  --border: #e8dfd0;
+  --border-strong: #d6c9b3;
 
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-soft: #eef2ff;
+  --accent: #0f766e;
+  --accent-hover: #115e59;
+  --accent-soft: #e1f0ec;
   --accent-text: #ffffff;
 
-  --credit: #047857; /* money owed TO you */
-  --credit-soft: #ecfdf5;
-  --debit: #be123c; /* money YOU owe */
-  --debit-soft: #fff1f2;
-  --neutral-soft: #eef0f6;
+  /* The warm second colour: the logo's door, active markers, small highlights. */
+  --warm: #c2410c;
+  --warm-soft: #fbe9df;
 
-  /* Chart marks, validated against the chart surface for lightness, chroma and contrast.
-     The income/expense pair is separated by POSITION in the chart rather than by hue,
-     because green-vs-red alone is not distinguishable under red-green colour blindness. */
-  --chart-in: #047857;
-  --chart-out: #be123c;
-  --chart-seq: #4f46e5;
+  --credit: #0f766e; /* money in, gains */
+  --credit-soft: #e1f0ec;
+  --debit: #b42318; /* money owed, losses, errors */
+  --debit-soft: #fdecea;
+  --neutral-soft: #efe8dc;
 
-  --shadow-sm: 0 1px 2px rgb(16 18 28 / 0.06), 0 1px 3px rgb(16 18 28 / 0.04);
-  --shadow-md: 0 4px 12px rgb(16 18 28 / 0.07), 0 2px 4px rgb(16 18 28 / 0.04);
-  --shadow-lg: 0 12px 32px rgb(16 18 28 / 0.12), 0 4px 8px rgb(16 18 28 / 0.06);
+  /* Chart marks, checked with the dataviz palette validator against --bg-elevated:
+     income teal and expense terracotta stay apart under protan and deutan simulation
+     (ΔE 13), so the two series do not rely on position alone. */
+  --chart-in: #00897b;
+  --chart-out: #c2410c;
+  --chart-seq: #00897b;
 
-  --c-indigo-bg: #e0e7ff;
-  --c-indigo-fg: #4f46e5;
-  --c-emerald-bg: #d1fae5;
-  --c-emerald-fg: #059669;
-  --c-amber-bg: #fef3c7;
-  --c-amber-fg: #b45309;
-  --c-rose-bg: #ffe4e6;
-  --c-rose-fg: #e11d48;
-  --c-sky-bg: #e0f2fe;
-  --c-sky-fg: #0284c7;
-  --c-violet-bg: #ede9fe;
-  --c-violet-fg: #7c3aed;
-  --c-teal-bg: #ccfbf1;
-  --c-teal-fg: #0d9488;
-  --c-orange-bg: #ffedd5;
-  --c-orange-fg: #ea580c;
+  --shadow-sm: 0 1px 2px rgb(74 52 24 / 0.05), 0 2px 6px rgb(74 52 24 / 0.04);
+  --shadow-md: 0 6px 16px rgb(74 52 24 / 0.08), 0 2px 4px rgb(74 52 24 / 0.04);
+  --shadow-lg: 0 16px 40px rgb(74 52 24 / 0.14), 0 4px 10px rgb(74 52 24 / 0.06);
+
+  --radius-card: 20px;
+  --radius-field: 12px;
+
+  --c-indigo-bg: #e3e6f6;
+  --c-indigo-fg: #3f4fb5;
+  --c-emerald-bg: #dcefe4;
+  --c-emerald-fg: #1d7a4a;
+  --c-amber-bg: #f8ead0;
+  --c-amber-fg: #a15c07;
+  --c-rose-bg: #f8e0e2;
+  --c-rose-fg: #b3304a;
+  --c-sky-bg: #dcecf5;
+  --c-sky-fg: #1d6f9e;
+  --c-violet-bg: #ece3f4;
+  --c-violet-fg: #7342a8;
+  --c-teal-bg: #d9efea;
+  --c-teal-fg: #0f766e;
+  --c-orange-bg: #fbe6d8;
+  --c-orange-fg: #b8480f;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg: #0c0d12;
-    --bg-elevated: #16181f;
-    --bg-sunken: #101219;
-    --bg-hover: #1d2029;
+    --bg: #171513;
+    --bg-elevated: #201d1a;
+    --bg-sunken: #1a1816;
+    --bg-hover: #2a2622;
+    --bg-sidebar: #1c1a17;
 
-    --text: #eceef5;
-    --text-muted: #9aa0b2;
-    --text-faint: #6b7284;
+    --text: #f2ede4;
+    --text-muted: #b3ab9d;
+    --text-faint: #7f786c;
 
-    --border: #252833;
-    --border-strong: #343846;
+    --border: #332f29;
+    --border-strong: #463f36;
 
-    --accent: #7c7cf9;
-    --accent-hover: #9090ff;
-    --accent-soft: #1d1f3a;
-    --accent-text: #0c0d12;
+    --accent: #3fb8a6;
+    --accent-hover: #5cc8b8;
+    --accent-soft: #15302c;
+    --accent-text: #0f1312;
 
-    --credit: #34d399;
-    --credit-soft: #0c2a22;
-    --debit: #fb7185;
-    --debit-soft: #2c1218;
-    --neutral-soft: #1d2029;
+    --warm: #e2774c;
+    --warm-soft: #3a2117;
 
-    --chart-in: #0d9f78;
-    --chart-out: #e8496a;
-    --chart-seq: #7c7cf9;
+    --credit: #5cc8b5;
+    --credit-soft: #12302b;
+    --debit: #f08a7e;
+    --debit-soft: #3a1a17;
+    --neutral-soft: #2a2622;
+
+    --chart-in: #2a9d8f;
+    --chart-out: #d9653b;
+    --chart-seq: #2a9d8f;
 
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
-    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+    --shadow-md: 0 6px 16px rgb(0 0 0 / 0.45);
+    --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.55);
 
-    --c-indigo-bg: #262a52;
-    --c-indigo-fg: #a5b4fc;
-    --c-emerald-bg: #0d3a2c;
-    --c-emerald-fg: #6ee7b7;
-    --c-amber-bg: #422c09;
-    --c-amber-fg: #fcd34d;
-    --c-rose-bg: #45161f;
-    --c-rose-fg: #fda4af;
-    --c-sky-bg: #0c2f45;
-    --c-sky-fg: #7dd3fc;
-    --c-violet-bg: #2e2154;
-    --c-violet-fg: #c4b5fd;
-    --c-teal-bg: #0b3733;
-    --c-teal-fg: #5eead4;
-    --c-orange-bg: #431f0b;
-    --c-orange-fg: #fdba74;
+    --c-indigo-bg: #262a4a;
+    --c-indigo-fg: #a9b4f5;
+    --c-emerald-bg: #123527;
+    --c-emerald-fg: #7fd6a6;
+    --c-amber-bg: #3d2b0c;
+    --c-amber-fg: #f1c56b;
+    --c-rose-bg: #42181f;
+    --c-rose-fg: #f3a3b1;
+    --c-sky-bg: #10303f;
+    --c-sky-fg: #8ccbec;
+    --c-violet-bg: #2d2140;
+    --c-violet-fg: #c9b0ec;
+    --c-teal-bg: #11322d;
+    --c-teal-fg: #6fd3c2;
+    --c-orange-bg: #3d2112;
+    --c-orange-fg: #f2a477;
   }
 }
 
@@ -126,12 +140,15 @@
   --color-line-strong: var(--border-strong);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
+  --color-warm: var(--warm);
   --color-credit: var(--credit);
   --color-credit-soft: var(--credit-soft);
   --color-debit: var(--debit);
   --color-debit-soft: var(--debit-soft);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+  /* --ff-body and --ff-display are set on <html> by next/font in app/layout.tsx. */
+  --font-sans: var(--ff-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--ff-display), Georgia, "Times New Roman", serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
@@ -146,15 +163,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Headings in the display face, everywhere, so no page has to remember to ask for it. */
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variation-settings: "SOFT" 50, "opsz" 48;
+}
+
 /* ---------------------------------------------------------------------------
    Component primitives.
 
    Inside @layer components deliberately. Unlayered rules beat layered ones in the
    cascade whatever the source order, so leaving these outside a layer made them win
-   against every Tailwind utility — `sm:hidden` could not hide a .label, and `pl-7`
-   could not make room for the rupee sign inside an .input. Tailwind orders components
-   before utilities, so in here the markup gets the last word, which is the point of
-   writing a utility next to a component class at all.
+   against every Tailwind utility. Tailwind orders components before utilities, so in
+   here the markup gets the last word.
 --------------------------------------------------------------------------- */
 @layer components {
   /* Tabular figures everywhere money is shown, so columns of numbers line up. */
@@ -163,14 +187,19 @@ body {
     letter-spacing: -0.01em;
   }
 
-  /* ---------------------------------------------------------------------------
-     Component primitives
-  --------------------------------------------------------------------------- */
+  /* Big headline figures: the display face, which is what makes the dashboard read as this
+     app at a glance. Not tabular — these stand alone rather than in columns. */
+  .figure {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variation-settings: "SOFT" 50, "opsz" 72;
+  }
 
   .card {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--radius-card);
     box-shadow: var(--shadow-sm);
   }
 
@@ -179,10 +208,10 @@ body {
     align-items: center;
     justify-content: center;
     gap: 0.45rem;
-    border-radius: 10px;
-    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    padding: 0.55rem 1.05rem;
     font-size: 0.875rem;
-    font-weight: 550;
+    font-weight: 600;
     line-height: 1.25rem;
     border: 1px solid transparent;
     cursor: pointer;
@@ -197,9 +226,14 @@ body {
     opacity: 0.5;
     cursor: not-allowed;
   }
+  .btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   .btn-primary {
     background: var(--accent);
     color: var(--accent-text);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.15) inset, var(--shadow-sm);
   }
   .btn-primary:hover:not(:disabled) {
     background: var(--accent-hover);
@@ -230,9 +264,8 @@ body {
     border-color: var(--debit);
   }
   .btn-sm {
-    padding: 0.3rem 0.6rem;
+    padding: 0.32rem 0.75rem;
     font-size: 0.8125rem;
-    border-radius: 8px;
   }
 
   .input,
@@ -241,8 +274,8 @@ body {
     width: 100%;
     background: var(--bg-elevated);
     border: 1px solid var(--border-strong);
-    border-radius: 10px;
-    padding: 0.5rem 0.7rem;
+    border-radius: var(--radius-field);
+    padding: 0.55rem 0.8rem;
     font-size: 0.9375rem;
     color: var(--text);
     transition: border-color 0.12s ease, box-shadow 0.12s ease;
@@ -274,7 +307,7 @@ body {
   .label {
     display: block;
     font-size: 0.8125rem;
-    font-weight: 550;
+    font-weight: 600;
     color: var(--text-muted);
     margin-bottom: 0.35rem;
   }
@@ -283,10 +316,10 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    padding: 0.15rem 0.5rem;
+    padding: 0.2rem 0.65rem;
     border-radius: 999px;
     font-size: 0.75rem;
-    font-weight: 550;
+    font-weight: 600;
     background: var(--neutral-soft);
     color: var(--text-muted);
   }
@@ -295,15 +328,15 @@ body {
     display: inline-flex;
     background: var(--bg-sunken);
     border: 1px solid var(--border);
-    border-radius: 11px;
-    padding: 3px;
-    gap: 3px;
+    border-radius: 999px;
+    padding: 4px;
+    gap: 4px;
   }
   .seg-item {
-    padding: 0.4rem 0.85rem;
-    border-radius: 8px;
+    padding: 0.4rem 0.95rem;
+    border-radius: 999px;
     font-size: 0.875rem;
-    font-weight: 550;
+    font-weight: 600;
     color: var(--text-muted);
     cursor: pointer;
     border: none;
@@ -315,8 +348,8 @@ body {
     color: var(--text);
   }
   .seg-item[data-active="true"] {
-    background: var(--bg-elevated);
-    color: var(--text);
+    background: var(--accent);
+    color: var(--accent-text);
     box-shadow: var(--shadow-sm);
   }
 
@@ -324,25 +357,11 @@ body {
     border-top: 1px solid var(--border);
   }
 
-
   /* -------------------------------------------------------------------------
-     Long lists.
-
-     `content-visibility: auto` lets the browser skip layout and paint for rows
-     that are off screen, and pick them up again as they scroll in. That is the
-     expensive part of a long list; the elements themselves cost little.
-
-     This is done in CSS rather than with a windowing library on purpose. The
-     transactions page is a server component, so its rows arrive as HTML — a
-     JavaScript virtualiser would mean shipping the entries as JSON instead,
-     rendering them on the client, and giving up find-in-page, because rows it
-     has not rendered are not in the document at all. The browser keeps them in
-     the document and simply does not draw them.
-
-     `contain-intrinsic-size` is the height to assume for a row that has not
-     been drawn yet. Without it the scrollbar jumps about as rows are measured;
-     it wants to be close to the real height, which is 61px for a row at the
-     default font size.
+     Long lists. `content-visibility: auto` lets the browser skip layout and
+     paint for rows that are off screen. Done in CSS rather than a windowing
+     library so rows stay server-rendered HTML and find-in-page still works.
+     `contain-intrinsic-size` is the height assumed for a row not yet drawn.
   ------------------------------------------------------------------------- */
   .list-long > * {
     content-visibility: auto;
@@ -352,9 +371,11 @@ body {
   .link {
     color: var(--accent);
     text-decoration: none;
+    font-weight: 500;
   }
   .link:hover {
     text-decoration: underline;
+    text-underline-offset: 3px;
   }
 }
 

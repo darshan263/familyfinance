@@ -162,7 +162,7 @@ export default async function ReportsPage({
 
       <section>
         <div className="mb-2 px-1">
-          <h2 className="text-base font-semibold">Investments today</h2>
+          <h2 className="text-lg">Investments today</h2>
           <p className="text-xs" style={{ color: "var(--text-faint)" }}>
             As of today, whatever period is picked above.
           </p>

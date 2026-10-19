@@ -73,46 +73,85 @@ export default async function DashboardPage() {
     );
   }
 
+  // Movement since the end of last month, from the same series the trend chart draws.
+  const sinceLastMonth = series.length > 1 ? series[series.length - 1].total - series[series.length - 2].total : null;
+  const hour = now.getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title={name} subtitle={`${monthLong.format(now)} at a glance`} />
+      <PageHeader title={greeting} subtitle={`${name} · ${monthLong.format(now)} at a glance`} />
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Net worth" hint="everything owned, less everything owed">
-          <Money cents={nw.total} tone={nw.total < 0 ? "debit" : "plain"} />
-        </Stat>
-        <Stat label="Bank & cash">
-          <Money cents={nw.liquid} />
-        </Stat>
-        <Stat
-          label="Investments"
-          hint={
-            gain !== 0 ? (
-              <>
-                <Money cents={gain} tone="auto" sign /> on <Money cents={nw.investedCost} /> put in
-              </>
-            ) : undefined
-          }
-        >
-          <Money cents={nw.investments} />
-        </Stat>
-        <Stat label="Owed on cards & loans">
-          <Money cents={-nw.liabilities} />
-        </Stat>
+      <section
+        className="card overflow-hidden"
+        style={{
+          background:
+            "radial-gradient(120% 140% at 100% 0%, var(--accent-soft) 0%, var(--bg-elevated) 55%)",
+        }}
+      >
+        <div className="grid gap-6 p-6 sm:p-7 lg:grid-cols-[1.2fr_2fr] lg:items-end">
+          <div>
+            <p className="text-xs font-semibold tracking-wide uppercase" style={{ color: "var(--text-faint)" }}>
+              Net worth
+            </p>
+            <p className="figure mt-2 text-[2.6rem] leading-none sm:text-5xl">
+              <Money cents={nw.total} tone={nw.total < 0 ? "debit" : "plain"} whole />
+            </p>
+            <p className="mt-3 text-sm" style={{ color: "var(--text-muted)" }}>
+              {sinceLastMonth !== null && sinceLastMonth !== 0 ? (
+                <>
+                  <span style={{ color: sinceLastMonth > 0 ? "var(--credit)" : "var(--debit)" }}>
+                    {sinceLastMonth > 0 ? "▲" : "▼"} <Money cents={Math.abs(sinceLastMonth)} className="font-semibold" whole />
+                  </span>{" "}
+                  since the end of last month
+                </>
+              ) : (
+                "Everything owned, less everything owed"
+              )}
+            </p>
+          </div>
+
+          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-0 sm:divide-x">
+            {[
+              { label: "Bank & cash", cents: nw.liquid, hint: null },
+              {
+                label: "Investments",
+                cents: nw.investments,
+                hint:
+                  gain !== 0 ? (
+                    <>
+                      <Money cents={gain} tone="auto" sign whole /> gain
+                    </>
+                  ) : null,
+              },
+              { label: "Owed on cards & loans", cents: -nw.liabilities, hint: null },
+            ].map((s) => (
+              <div key={s.label} className="sm:px-5 sm:first:pl-0">
+                <dt className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {s.label}
+                </dt>
+                <dd className="figure mt-1 text-xl">
+                  <Money cents={s.cents} whole />
+                </dd>
+                {s.hint && <dd className="mt-0.5 text-xs">{s.hint}</dd>}
+              </div>
+            ))}
+          </dl>
+        </div>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
         <Stat label={`Income in ${monthLong.format(now)}`}>
-          <Money cents={totals.income} tone="credit" />
+          <Money cents={totals.income} tone="credit" whole />
         </Stat>
         <Stat label={`Spent in ${monthLong.format(now)}`}>
-          <Money cents={totals.expense} />
+          <Money cents={totals.expense} whole />
         </Stat>
         <Stat
           label="Saved"
           hint={rate !== null ? `${rate}% of income` : "no income recorded this month yet"}
         >
-          <Money cents={saved} tone="auto" sign />
+          <Money cents={saved} tone="auto" sign whole />
         </Stat>
       </section>
 
@@ -122,7 +161,7 @@ export default async function DashboardPage() {
             <NetWorthTrend data={series} />
           ) : (
             <>
-              <h2 className="text-base font-semibold">Net worth</h2>
+              <h2 className="text-lg">Net worth</h2>
               <p className="mt-6 text-center text-sm" style={{ color: "var(--text-faint)" }}>
                 The trend appears once there is more than one month to compare.
               </p>
@@ -155,7 +194,7 @@ export default async function DashboardPage() {
 
       <section>
         <div className="mb-2 flex items-baseline justify-between px-1">
-          <h2 className="text-base font-semibold">Recent entries</h2>
+          <h2 className="text-lg">Recent entries</h2>
           <Link href="/transactions" className="link text-sm">
             All transactions
           </Link>

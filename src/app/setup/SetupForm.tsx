@@ -43,7 +43,7 @@ export function SetupForm({ today }: { today: string }) {
     <form action={action} className="flex flex-col gap-6">
       <section className="card flex flex-col gap-4 p-5">
         <div>
-          <h2 className="text-base font-semibold">Your household</h2>
+          <h2 className="text-lg">Your household</h2>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
             There is one login. Whoever holds it manages everything.
           </p>
@@ -111,7 +111,7 @@ export function SetupForm({ today }: { today: string }) {
       </section>
 
       <section className="card p-5">
-        <h2 className="text-base font-semibold">Members</h2>
+        <h2 className="text-lg">Members</h2>
         <p className="mt-1 mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
           The people in the household. They do not sign in; you tag entries and accounts with
           them so you can see whose money is whose. Anything not tagged is Shared.
@@ -151,7 +151,7 @@ export function SetupForm({ today }: { today: string }) {
       </section>
 
       <section className="card p-5">
-        <h2 className="text-base font-semibold">Accounts</h2>
+        <h2 className="text-lg">Accounts</h2>
         <p className="mt-1 mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
           Where your money is today. Start with the main ones; you can add investments, cards
           and loans later from the Accounts page. For a credit card or loan, enter the amount

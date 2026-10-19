@@ -98,7 +98,7 @@ export default async function AccountsPage() {
           return (
             <section key={group}>
               <div className="mb-2 flex items-baseline justify-between px-1">
-                <h2 className="text-base font-semibold">{GROUP_LABELS[group]}</h2>
+                <h2 className="text-lg">{GROUP_LABELS[group]}</h2>
                 <Money
                   cents={group === "LIABILITY" ? -total : total}
                   className="text-sm font-medium"

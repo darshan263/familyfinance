@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Logo } from "@/components/Logo";
 import { Notice } from "@/components/Notice";
 import { safeNext } from "@/lib/auth";
 import { getHouseholdName } from "@/lib/queries";
@@ -23,13 +24,10 @@ export default async function LoginPage({
     <div className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
         <header className="mb-6 text-center">
-          <span
-            className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl text-xl font-bold"
-            style={{ background: "var(--accent)", color: "var(--accent-text)" }}
-          >
-            ₹
+          <span className="mb-5 flex justify-center">
+            <Logo size={56} />
           </span>
-          <h1 className="text-xl font-semibold tracking-tight">{householdName}</h1>
+          <h1 className="text-[1.75rem] leading-tight">{householdName}</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
             Sign in to FamilyFinance
           </p>

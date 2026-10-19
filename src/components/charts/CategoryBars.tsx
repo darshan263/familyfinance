@@ -25,7 +25,7 @@ export function CategoryBars({
   return (
     <figure className="m-0">
       <figcaption className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-base font-semibold">{title}</h2>
+        <h2 className="text-lg">{title}</h2>
         <span className="tnum text-sm font-medium" style={{ color: "var(--text-muted)" }}>
           {formatMoney(total)}
         </span>
