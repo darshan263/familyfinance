@@ -74,3 +74,57 @@ export function summariseInvestments(
       .sort((a, b) => b.cents - a.cents),
   };
 }
+
+export interface InvestmentGroup<A> {
+  type: string;
+  label: string;
+  items: A[];
+  invested: number;
+  current: number;
+  gain: number;
+  /** Gain as a share of what went in, or null when nothing has gone in. */
+  gainRatio: number | null;
+}
+
+/**
+ * Holdings grouped by kind, for the collapsed view: groups with the most money in them first,
+ * and the biggest holdings first within each. Accounts that are not investments are skipped.
+ */
+export function groupInvestments<A extends { id: string; type: string }>(
+  accounts: A[],
+  positions: Map<string, Position>,
+): InvestmentGroup<A>[] {
+  const groups = new Map<string, InvestmentGroup<A>>();
+  for (const a of accounts) {
+    const p = positions.get(a.id);
+    if (!p || !isInvestment(a.type)) continue;
+    const g = groups.get(a.type) ?? {
+      type: a.type,
+      label: accountTypeLabel(a.type),
+      items: [],
+      invested: 0,
+      current: 0,
+      gain: 0,
+      gainRatio: null,
+    };
+    g.items.push(a);
+    g.invested += p.book;
+    g.current += p.current;
+    groups.set(a.type, g);
+  }
+  const worth = (a: A) => positions.get(a.id)!.current;
+  return [...groups.values()]
+    .map((g) => ({
+      ...g,
+      items: [...g.items].sort((x, y) => worth(y) - worth(x)),
+      gain: g.current - g.invested,
+      gainRatio: g.invested > 0 ? (g.current - g.invested) / g.invested : null,
+    }))
+    .sort((x, y) => y.current - x.current);
+}
+
+/** "+8.3%" from a ratio, or null. */
+export function formatRatio(ratio: number | null): string | null {
+  if (ratio === null) return null;
+  return `${ratio >= 0 ? "+" : ""}${(ratio * 100).toFixed(1)}%`;
+}

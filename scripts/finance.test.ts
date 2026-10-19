@@ -41,7 +41,14 @@ import { csvCell, toCsv } from "../src/lib/csv";
 import { endOfDay, monthsBetween, parseDay } from "../src/lib/date";
 import { SHARED, whereFromFilter } from "../src/lib/filters";
 import { moneyField } from "../src/lib/forms";
-import { accountPath, INVESTMENT_TYPES, pickFundingAccount, summariseInvestments } from "../src/lib/investments";
+import {
+  accountPath,
+  formatRatio,
+  groupInvestments,
+  INVESTMENT_TYPES,
+  pickFundingAccount,
+  summariseInvestments,
+} from "../src/lib/investments";
 import { formatMoney, MAX_AMOUNT_CENTS, parseAmount, sumToPaise, toPaise } from "../src/lib/money";
 import { fyLabel, fyStartYear, periodBounds, resolvePeriod } from "../src/lib/period";
 import { DEFAULT_RANGE, rangeBounds, resolveRange } from "../src/lib/range";
@@ -463,6 +470,31 @@ test("the investments summary adds up, with gain as a share of what went in", ()
   assert.equal(s.gain, rupees(20_000));
   assert.equal(s.gainRatio, 0.1);
   assert.deepEqual(s.byType.map((t) => t.label), ["Mutual fund", "Fixed deposit"], "largest first");
+});
+
+test("holdings group by kind: biggest group first, biggest holding first, totals per group", () => {
+  const acct = (id: string, type: string, opening: number): AccountLite => ({
+    id,
+    type,
+    openingBalanceCents: rupees(opening),
+    openingDate: day("2026-01-01"),
+  });
+  const accounts = [
+    SAVINGS,
+    acct("mf-small", "MUTUAL_FUND", 50_000),
+    acct("fd", "FD", 3_00_000),
+    acct("mf-big", "MUTUAL_FUND", 1_00_000),
+  ];
+  const positions = computePositions(accounts, [], [val("mf-big", "2026-06-30", rupees(1_10_000))], NOW);
+  const groups = groupInvestments(accounts, positions);
+  assert.deepEqual(groups.map((g) => g.label), ["Fixed deposit", "Mutual fund"], "the bank account is not a group");
+  const mf = groups[1];
+  assert.deepEqual(mf.items.map((a) => a.id), ["mf-big", "mf-small"]);
+  assert.equal(mf.invested, rupees(1_50_000));
+  assert.equal(mf.current, rupees(1_60_000));
+  assert.equal(mf.gain, rupees(10_000));
+  assert.equal(formatRatio(mf.gainRatio), "+6.7%");
+  assert.equal(formatRatio(null), null);
 });
 
 test("investments have their own pages; other accounts keep theirs", () => {
