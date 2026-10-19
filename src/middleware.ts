@@ -8,7 +8,7 @@ import { SESSION_COOKIE, verifySession } from "@/lib/auth";
  * edge runtime and cannot reach the database to find out).
  *
  * This only checks that the token is well-formed and unexpired. Whether the user still
- * exists, and whether the token predates a password reset, needs the database — so
+ * exists, and whether the token predates a password change, needs the database — so
  * `getCurrentUser` is the real gate and every page goes through it.
  */
 const PUBLIC_PATHS = ["/login", "/setup"];
@@ -24,9 +24,11 @@ export async function middleware(request: NextRequest) {
   const session = token ? await verifySession(token) : null;
 
   if (!session) {
+    // Keep the query string in `next`, so a filtered list or report comes back as it was.
+    const back = pathname + request.nextUrl.search;
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname)}`;
+    url.search = back === "/" ? "" : `?next=${encodeURIComponent(back)}`;
     return NextResponse.redirect(url);
   }
 

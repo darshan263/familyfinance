@@ -12,11 +12,19 @@ import { endOfDay, formatDate, toDateInput } from "@/lib/date";
 import { prisma } from "@/lib/db";
 import { centsToInput, formatMoney } from "@/lib/money";
 import { getMembers } from "@/lib/queries";
+import { requireUser } from "@/lib/session";
 import { deleteValuation } from "../actions";
 import { AccountForm } from "../AccountForm";
 import { AdjustForm, ValuationForm } from "../BalanceForms";
 
 export const dynamic = "force-dynamic";
+
+/** What the small figure under each history entry is, by group. */
+const RUNNING_LABEL = {
+  LIQUID: "running balance",
+  INVESTMENT: "amount put in so far",
+  LIABILITY: "amount owed by entries",
+} as const;
 
 export default async function AccountPage({
   params,
@@ -25,6 +33,7 @@ export default async function AccountPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ saved?: string; valued?: string; unvalued?: string; adjusted?: string }>;
 }) {
+  await requireUser();
   const { id } = await params;
   const sp = await searchParams;
 
@@ -73,6 +82,9 @@ export default async function AccountPage({
         {sp.saved === "1" && <Notice tone="ok">Account saved.</Notice>}
         {sp.valued === "1" && <Notice tone="ok">Value updated.</Notice>}
         {sp.unvalued === "1" && <Notice tone="ok">Value update removed.</Notice>}
+        {sp.unvalued === "missing" && (
+          <Notice tone="warn">That value update was already removed. Nothing changed.</Notice>
+        )}
         {sp.adjusted === "1" && (
           <Notice tone="ok">Balance adjusted. The difference is in the history below and is not counted as income or expense.</Notice>
         )}
@@ -165,9 +177,16 @@ export default async function AccountPage({
           <span className="text-xs" style={{ color: "var(--text-faint)" }}>
             Opening {formatMoney(toEnteredBalance(account.type, account.openingBalanceCents))}
             {group === "LIABILITY" ? " owed" : ""} on {formatDate(account.openingDate)} ·{" "}
-            {group === "LIABILITY" ? "amount owed" : "running balance"} under each entry
+            {RUNNING_LABEL[group]} under each entry
           </span>
         </div>
+        {group !== "LIQUID" && account.valuations.length > 0 && (
+          <p className="mb-2 px-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            The figures under each entry follow the entries alone. Value updates are not applied
+            to them, so they can differ from the {group === "LIABILITY" ? "amount owed" : "value"}{" "}
+            shown above, which uses the latest update.
+          </p>
+        )}
         {futureCount > 0 && (
           <p className="mb-2 px-1 text-xs" style={{ color: "var(--text-muted)" }}>
             {futureCount} future-dated {futureCount === 1 ? "entry is" : "entries are"} listed but

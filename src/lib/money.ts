@@ -14,8 +14,9 @@ export const CURRENCY_SYMBOL = "\u20B9";
  * leaves room for nine thousand maximum-size entries before any *total* could reach the
  * edge, so every sum in the app stays exact by construction.
  *
- * This is the limit quoted to the user, checked up front by `entrySchema`. `toPaise` is the
- * backstop at the real edge, for anything that gets past it.
+ * This is the limit quoted to the user, checked up front by the `amount` field of `txnSchema`
+ * (lib/txn.ts) and the `money` parser in accounts/actions.ts. `toPaise` is the backstop at
+ * the real edge, for anything that gets past them.
  */
 export const MAX_AMOUNT_CENTS = 1_000_00_00_00_000;
 
@@ -59,13 +60,20 @@ export function sumToPaise(value: unknown): number {
   throw new Error(`Expected a money total, got ${typeof value}.`);
 }
 
-/** Parse "1,234.5" / "₹1234" / "1234.567" into paise. Returns null if not a valid amount. */
+/**
+ * Parse "1,234.5" / "₹1234" / "-250" into paise. Returns null if it is not an amount.
+ *
+ * Built from the digits rather than through a float: `Number("1.005") * 100` is 100.49999…,
+ * which would round a typed paisa away without a word. A third decimal place is refused for
+ * the same reason: there is no such thing as a fraction of a paisa to keep.
+ */
 export function parseAmount(input: string): number | null {
   const cleaned = input.replace(/[\s,\u20B9]/g, "");
-  if (cleaned === "" || !/^-?\d*\.?\d*$/.test(cleaned)) return null;
-  const value = Number(cleaned);
-  if (!Number.isFinite(value)) return null;
-  return Math.round(value * 100);
+  const m = cleaned.match(/^(-?)(\d*)(?:\.(\d{0,2}))?$/);
+  if (!m || (m[2] === "" && !m[3])) return null;
+  const paise = Number(m[2] || "0") * 100 + Number((m[3] ?? "").padEnd(2, "0"));
+  if (!Number.isSafeInteger(paise)) return null;
+  return m[1] && paise !== 0 ? -paise : paise;
 }
 
 /** Paise -> a plain editable decimal string, e.g. 123456 -> "1234.56". */

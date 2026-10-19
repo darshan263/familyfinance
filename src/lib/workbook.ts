@@ -9,6 +9,17 @@ import ExcelJS from "exceljs";
  * it is written as one.
  */
 
+/**
+ * Rupees, as written to the sheet. Everywhere else the app counts in paise, and both are
+ * plain numbers, so passing a paise total straight in would type-check and print every figure
+ * a hundred times too large. Branding the rarer unit means `toRupees` is the only way in.
+ */
+export type Rupees = number & { readonly __unit: "rupees" };
+
+export function toRupees(paise: number): Rupees {
+  return (paise / 100) as Rupees;
+}
+
 export interface EntryRow {
   date: Date;
   kind: string;
@@ -17,29 +28,29 @@ export interface EntryRow {
   account: string;
   toAccount: string;
   member: string;
-  amount: number;
+  amount: Rupees;
   notes: string;
 }
 
 export interface NamedAmount {
   name: string;
-  amount: number;
+  amount: Rupees;
 }
 
 export interface AccountRow {
   name: string;
   type: string;
   owner: string;
-  book: number;
-  current: number;
-  gain: number;
+  book: Rupees;
+  current: Rupees;
+  gain: Rupees;
 }
 
 export interface WorkbookInput {
   /** What the export covers: "October 2026", "FY 2026-27", "all time". */
   periodLabel: string;
   entries: EntryRow[];
-  totals: { income: number; expense: number };
+  totals: { income: Rupees; expense: Rupees };
   expenseByCategory: NamedAmount[];
   incomeByCategory: NamedAmount[];
   expenseByMember: NamedAmount[];

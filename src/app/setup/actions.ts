@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -75,8 +76,9 @@ export async function completeSetup(_prev: SetupState, formData: FormData): Prom
   let user;
   try {
     user = await prisma.$transaction(async (tx) => {
-      // Re-check inside the transaction: the check above is for the common case, this one
-      // stops two simultaneous first-run submissions both going through.
+      // Re-check inside the transaction, for a second submission that arrives after the first
+      // has committed. Two truly simultaneous ones both pass this; the unique constraints
+      // stop the second (see the catch below).
       if ((await tx.user.count()) > 0) throw new AlreadySetUp();
 
       const created = await tx.user.create({
@@ -100,7 +102,13 @@ export async function completeSetup(_prev: SetupState, formData: FormData): Prom
       return created;
     });
   } catch (err) {
-    if (err instanceof AlreadySetUp) return { error: "This has already been set up. Sign in instead." };
+    // The count above does not lock anything, so two simultaneous first runs can both pass it;
+    // what actually stops the second is a unique constraint (the setting key, the categories)
+    // failing inside the same transaction. Both mean the same thing to the person waiting.
+    const duplicate = err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+    if (err instanceof AlreadySetUp || duplicate) {
+      return { error: "This has already been set up. Sign in instead." };
+    }
     throw err;
   }
 

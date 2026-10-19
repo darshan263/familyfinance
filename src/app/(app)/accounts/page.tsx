@@ -8,6 +8,7 @@ import { accountGroup, accountTypeLabel, ACCOUNT_GROUPS, GROUP_LABELS, type Acco
 import { gainPercent, type Position } from "@/lib/balances";
 import { formatDateCompact } from "@/lib/date";
 import { getPositions } from "@/lib/queries";
+import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ function PositionCell({ group, p }: { group: AccountGroup; p: Position }) {
 }
 
 export default async function AccountsPage() {
+  await requireUser();
   const { accounts, positions, netWorth } = await getPositions();
 
   return (

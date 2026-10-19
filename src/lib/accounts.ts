@@ -43,9 +43,24 @@ export function isAccountType(value: string): value is AccountType {
   return ACCOUNT_TYPES.some((t) => t.key === value);
 }
 
-/** The group for a stored type. An unknown type is treated as liquid: the plainest reading. */
+/**
+ * The group for a stored type. An unknown type throws rather than guessing: treated as
+ * liquid, a loan would count as money in the bank and every total built on it would be wrong
+ * without a sign anything was. The database refuses unknown types too (prisma/constraints.sql).
+ */
 export function accountGroup(type: string): AccountGroup {
-  return ACCOUNT_TYPES.find((t) => t.key === type)?.group ?? "LIQUID";
+  const known = ACCOUNT_TYPES.find((t) => t.key === type);
+  if (!known) throw new Error(`Unknown account type "${type}".`);
+  return known.group;
+}
+
+/**
+ * Whether changing an account from one type to another moves it between "owned" and "owed".
+ * Valuations are stored in the sign of the side they were taken on, so such a change would
+ * silently flip what every one of them means.
+ */
+export function crossesSign(fromType: string, toType: string): boolean {
+  return (accountGroup(fromType) === "LIABILITY") !== (accountGroup(toType) === "LIABILITY");
 }
 
 export function accountTypeLabel(type: string): string {

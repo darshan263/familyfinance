@@ -12,6 +12,8 @@
 
 import { PrismaClient } from "@prisma/client";
 
+import { MIN_SECRET_LENGTH } from "../src/lib/auth";
+
 type Level = "ok" | "warn" | "fail";
 const results: { level: Level; text: string }[] = [];
 const say = (level: Level, text: string) => results.push({ level, text });
@@ -125,15 +127,15 @@ async function probe(name: string, url: string | undefined) {
     say("fail", "The two URLs point at different Supabase projects.");
   }
 
-  if (!AUTH_SECRET || AUTH_SECRET.length < 32) {
-    say("fail", "AUTH_SECRET is missing or shorter than 32 characters.");
+  if (!AUTH_SECRET || AUTH_SECRET.length < MIN_SECRET_LENGTH) {
+    say("fail", `AUTH_SECRET is missing or shorter than ${MIN_SECRET_LENGTH} characters.`);
   } else if (/change-me|placeholder/i.test(AUTH_SECRET)) {
     say("fail", "AUTH_SECRET is still a placeholder.");
   } else {
     say("ok", `AUTH_SECRET set (${AUTH_SECRET.length} chars).`);
   }
 
-  if (!CRON_SECRET || CRON_SECRET.length < 32) {
+  if (!CRON_SECRET || CRON_SECRET.length < MIN_SECRET_LENGTH) {
     say("warn", "CRON_SECRET is missing or short. /api/cron refuses to run without it.");
   } else {
     say("ok", `CRON_SECRET set (${CRON_SECRET.length} chars).`);

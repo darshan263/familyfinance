@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { MEMBER_COLORS, swatch } from "@/lib/colors";
 import { periodBounds } from "@/lib/period";
 import { getMembers, sumByMember } from "@/lib/queries";
+import { requireUser } from "@/lib/session";
 import { addMember, toggleMember, updateMember } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export default async function MembersPage({
 }: {
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
+  await requireUser();
   const sp = await searchParams;
   const fy = periodBounds("fy");
   const [members, spent, earned] = await Promise.all([

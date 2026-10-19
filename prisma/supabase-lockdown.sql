@@ -1,5 +1,6 @@
 -- Run this in the Supabase SQL editor AFTER `prisma db push` has created the tables.
--- Re-run it any time you add a model.
+-- Adding a model? Add its "enable row level security" line below first, then re-run this:
+-- the list of tables is written out, so re-running alone leaves a new table exposed.
 --
 -- WHY THIS EXISTS
 --

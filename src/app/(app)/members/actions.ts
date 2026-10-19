@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { MEMBER_COLORS } from "@/lib/colors";
 import { prisma } from "@/lib/db";
 import { logActivity } from "@/lib/queries";
-import { requireUser } from "@/lib/session";
+import { requireUserToChange } from "@/lib/session";
 
 /** Outcomes travel back as a query parameter, since every action here ends in a redirect. */
 function back(outcome: string): never {
@@ -25,7 +25,7 @@ async function nameTaken(name: string, exceptId?: string) {
 }
 
 export async function addMember(formData: FormData): Promise<void> {
-  await requireUser();
+  await requireUserToChange();
   const name = readName(formData);
   if (!name) back("error=name");
   if (await nameTaken(name)) back("error=taken");
@@ -37,7 +37,7 @@ export async function addMember(formData: FormData): Promise<void> {
 }
 
 export async function updateMember(formData: FormData): Promise<void> {
-  await requireUser();
+  await requireUserToChange();
   const id = String(formData.get("memberId") ?? "");
   const existing = id ? await prisma.member.findUnique({ where: { id } }) : null;
   if (!existing) back("error=missing");
@@ -56,7 +56,7 @@ export async function updateMember(formData: FormData): Promise<void> {
 
 /** Deactivate rather than delete: their old entries keep saying whose they were. */
 export async function toggleMember(formData: FormData): Promise<void> {
-  await requireUser();
+  await requireUserToChange();
   const id = String(formData.get("memberId") ?? "");
   const existing = id ? await prisma.member.findUnique({ where: { id } }) : null;
   if (!existing) back("error=missing");

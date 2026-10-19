@@ -8,15 +8,16 @@ import {
   accountGroup,
   accountTypeLabel,
   ACCOUNT_TYPE_KEYS,
+  crossesSign,
   takesValuations,
   toStoredBalance,
 } from "@/lib/accounts";
-import { computePositions } from "@/lib/balances";
-import { endOfDay, parseDay } from "@/lib/date";
+import { adjustmentFor, beforeOpening } from "@/lib/balances";
+import { formatDate, parseDay } from "@/lib/date";
 import { prisma } from "@/lib/db";
 import { formatMoney, MAX_AMOUNT_CENTS, parseAmount, toCents } from "@/lib/money";
 import { logActivity } from "@/lib/queries";
-import { requireUser } from "@/lib/session";
+import { requireUserToChange } from "@/lib/session";
 
 export interface FormState {
   error?: string;
@@ -31,9 +32,17 @@ const day = z.string().transform((value, ctx) => {
   return date;
 });
 
-/** A balance or value as typed. `allowNegative` is for an overdrawn bank account. */
-function money(label: string, { allowNegative = false } = {}) {
+/**
+ * A balance or value as typed. `allowNegative` is for an overdrawn bank account. A blank
+ * opening balance reasonably means zero; a blank value update or adjustment is a mistake, not
+ * a claim that the account is worth nothing, so those pass `required`.
+ */
+function money(label: string, { allowNegative = false, required = false } = {}) {
   return z.string().transform((value, ctx) => {
+    if (required && value.trim() === "") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label} is needed` });
+      return z.NEVER;
+    }
     const cents = value.trim() === "" ? 0 : parseAmount(value);
     if (cents === null) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label} should be a number, like 25000` });
@@ -75,7 +84,7 @@ const str = (fd: FormData, k: string) => {
 };
 
 export async function saveAccount(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireUser();
+  await requireUserToChange();
 
   const parsed = accountSchema.safeParse({
     name: str(formData, "name"),
@@ -121,13 +130,18 @@ export async function saveAccount(_prev: FormState, formData: FormData): Promise
     });
     if (!existing) return { error: "This account no longer exists." };
 
-    // Valuations are stored in the sign of the group they were taken in. Moving an account
-    // between "owned" and "owed" would silently flip what they mean.
-    const crossesSign =
-      (accountGroup(existing.type) === "LIABILITY") !== (accountGroup(v.type) === "LIABILITY");
-    if (crossesSign && existing._count.valuations > 0) {
+    if (crossesSign(existing.type, v.type) && existing._count.valuations > 0) {
       return {
         error: `This account has value updates recorded as ${accountTypeLabel(existing.type).toLowerCase()} figures. Delete them first, or add a new account of the other type.`,
+      };
+    }
+
+    // Moving the start date later would leave existing entries dated before it, and the new
+    // opening balance would count them a second time.
+    const earliest = await earliestActivity(id);
+    if (earliest && beforeOpening(earliest, { openingDate: v.openingDate })) {
+      return {
+        error: `This account has entries or value updates from ${formatDate(earliest)}, so tracking cannot start after that. Pick ${formatDate(earliest)} or earlier.`,
       };
     }
 
@@ -148,10 +162,32 @@ export async function saveAccount(_prev: FormState, formData: FormData): Promise
   redirect(`/accounts/${savedId}?saved=1`);
 }
 
+/** The date of the earliest live entry or value update on an account, if any. */
+async function earliestActivity(accountId: string): Promise<Date | null> {
+  const [txn, valuation] = await Promise.all([
+    prisma.transaction.findFirst({
+      where: { deletedAt: null, OR: [{ accountId }, { toAccountId: accountId }] },
+      orderBy: { date: "asc" },
+      select: { date: true },
+    }),
+    prisma.valuation.findFirst({ where: { accountId }, orderBy: { date: "asc" }, select: { date: true } }),
+  ]);
+  const dates = [txn?.date, valuation?.date].filter((d): d is Date => Boolean(d));
+  return dates.length ? new Date(Math.min(...dates.map((d) => d.getTime()))) : null;
+}
+
+/** The refusal for a value update or adjustment dated before the account was being tracked. */
+function beforeOpeningMessage(account: { name: string; openingDate: Date }): string {
+  return (
+    `${account.name} is tracked from ${formatDate(account.openingDate)}. Pick that date or ` +
+    `later, or move the account's start date back first.`
+  );
+}
+
 const valuationSchema = z.object({
   accountId: z.string().min(1),
   date: day,
-  value: money("The value"),
+  value: money("The value", { required: true }),
   note: z
     .string()
     .trim()
@@ -161,7 +197,7 @@ const valuationSchema = z.object({
 
 /** Record what an investment is worth, or a liability is owed, on a date. */
 export async function addValuation(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireUser();
+  await requireUserToChange();
 
   const parsed = valuationSchema.safeParse({
     accountId: str(formData, "accountId"),
@@ -177,6 +213,9 @@ export async function addValuation(_prev: FormState, formData: FormData): Promis
   if (!takesValuations(account.type)) {
     return { error: "Bank and cash accounts are corrected with Adjust balance instead." };
   }
+  // A value from before tracking started would replace the opening value as the basis of
+  // "worth now" and quietly drop it.
+  if (beforeOpening(v.date, account)) return { error: beforeOpeningMessage(account) };
 
   const stored = toStoredBalance(account.type, v.value);
   await prisma.valuation.create({
@@ -189,11 +228,13 @@ export async function addValuation(_prev: FormState, formData: FormData): Promis
 }
 
 export async function deleteValuation(formData: FormData): Promise<void> {
-  await requireUser();
+  await requireUserToChange();
   const id = str(formData, "valuationId");
   const accountId = str(formData, "accountId");
   const existing = id ? await prisma.valuation.findUnique({ where: { id }, include: { account: true } }) : null;
-  if (!existing) redirect(accountId ? `/accounts/${accountId}` : "/accounts");
+  // Already gone — a double click, or deleted in another tab. Say so rather than reloading
+  // the page as if something had happened.
+  if (!existing) redirect(accountId ? `/accounts/${accountId}?unvalued=missing` : "/accounts");
 
   await prisma.valuation.delete({ where: { id } });
   await logActivity("VALUATION", `removed a value update from ${existing.account.name}`);
@@ -205,7 +246,7 @@ export async function deleteValuation(formData: FormData): Promise<void> {
 const adjustSchema = z.object({
   accountId: z.string().min(1),
   date: day,
-  balance: money("The balance", { allowNegative: true }),
+  balance: money("The balance", { allowNegative: true, required: true }),
 });
 
 /**
@@ -214,7 +255,7 @@ const adjustSchema = z.object({
  * rather than buried in an edited opening balance, and it never counts as income or expense.
  */
 export async function adjustBalance(_prev: FormState, formData: FormData): Promise<FormState> {
-  await requireUser();
+  await requireUserToChange();
 
   const parsed = adjustSchema.safeParse({
     accountId: str(formData, "accountId"),
@@ -229,13 +270,15 @@ export async function adjustBalance(_prev: FormState, formData: FormData): Promi
   if (takesValuations(account.type)) {
     return { error: "Investments, cards and loans take Update value instead." };
   }
+  // Before the opening date the book balance leaves the opening out, so the difference would
+  // absorb it — and from the opening date on it would be counted a second time.
+  if (beforeOpening(v.date, account)) return { error: beforeOpeningMessage(account) };
 
   const txns = await prisma.transaction.findMany({
     where: { deletedAt: null, OR: [{ accountId: account.id }, { toAccountId: account.id }] },
     select: { kind: true, amountCents: true, accountId: true, toAccountId: true, date: true },
   });
-  const book = computePositions([account], txns, [], endOfDay(v.date)).get(account.id)!.book;
-  const diff = v.balance - book;
+  const { book, diff } = adjustmentFor(account, txns, v.date, v.balance);
   if (diff === 0) return { error: `${account.name} already shows ${formatMoney(book)} on that date. Nothing to adjust.` };
 
   await prisma.transaction.create({

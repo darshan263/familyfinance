@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Notice } from "@/components/Notice";
 import { PageHeader } from "@/components/PageHeader";
 import { toDateInput } from "@/lib/date";
+import { requireUser } from "@/lib/session";
 import { FORM_KINDS, type FormKind } from "@/lib/txn";
 import { getFormOptions } from "../form-options";
 import { TxnForm } from "../TxnForm";
@@ -14,6 +15,7 @@ export default async function NewTransactionPage({
 }: {
   searchParams: Promise<{ kind?: string; saved?: string }>;
 }) {
+  await requireUser();
   const { kind, saved } = await searchParams;
   const options = await getFormOptions();
   const defaultKind: FormKind = FORM_KINDS.includes(kind as FormKind) ? (kind as FormKind) : "EXPENSE";

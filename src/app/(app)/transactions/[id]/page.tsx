@@ -8,6 +8,7 @@ import { formatDate, toDateInput } from "@/lib/date";
 import { prisma } from "@/lib/db";
 import { centsToInput } from "@/lib/money";
 import type { FormKind } from "@/lib/txn";
+import { requireUser } from "@/lib/session";
 import { deleteTransaction } from "../actions";
 import { getFormOptions } from "../form-options";
 import { TxnForm } from "../TxnForm";
@@ -15,6 +16,7 @@ import { TxnForm } from "../TxnForm";
 export const dynamic = "force-dynamic";
 
 export default async function EditTransactionPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireUser();
   const { id } = await params;
   const txn = await prisma.transaction.findUnique({ where: { id }, include: { account: true } });
   if (!txn || txn.deletedAt) notFound();

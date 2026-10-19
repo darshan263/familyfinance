@@ -80,7 +80,7 @@ const amount = z
   .transform((value, ctx) => {
     const cents = parseAmount(value);
     if (cents === null) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter an amount, like 1250 or 1,250.50" });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter an amount, like 1250 or 1,250.50 (at most two decimal places)" });
       return z.NEVER;
     }
     if (cents <= 0) {

@@ -156,7 +156,7 @@ model Setting {
 model RateLimit {
   key     String   @id
   count   Int      @default(0)
-  /// When this window stops counting. Rows past this are dead and get cleaned up lazily.
+  /// When this window stops counting. Rows past this are dead and get replaced on the next attempt, and swept daily by /api/cron.
   resetAt DateTime
 
   @@index([resetAt])

@@ -21,7 +21,7 @@ async function main() {
   if ((await prisma.user.count()) > 0) {
     console.error(
       "This database has already been set up; the demo would mix into it. Point DATABASE_URL " +
-        "at an empty database, or reset this one with `npx prisma migrate reset`.",
+        "at an empty database, or wipe this one with `npx prisma db push --force-reset`.",
     );
     process.exitCode = 1;
     return;

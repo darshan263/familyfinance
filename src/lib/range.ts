@@ -116,10 +116,9 @@ export interface ResolvedRange {
 /**
  * Work out which window the list should show, from whatever is in the URL.
  *
- * Explicit dates beat a preset. The chip row keeps the two from coexisting — picking a
- * preset clears the dates and typing a date clears the preset — so this only ever has to
- * arbitrate a hand-edited URL, and when it does it takes the dates, because typing a range
- * is the more deliberate act of the two.
+ * Explicit dates beat a preset. Picking a chip drops any dates, but the filter form keeps the
+ * current preset in a hidden field, so submitting dates sends both. The dates win, because
+ * typing a range is the more deliberate act of the two.
  *
  * A date that is present but unparseable counts as absent here; the Transactions page
  * reports it separately rather than letting it take the list down.
@@ -141,8 +140,12 @@ export function resolveRange(
     };
   }
 
-  const asked = isRangeKey(params.range);
-  const key = asked ? (params.range as RangeKey) : DEFAULT_RANGE;
+  const key: RangeKey = isRangeKey(params.range) ? params.range : DEFAULT_RANGE;
   const bounds = rangeBounds(key, now);
-  return { key, ...bounds, label: presetLabel(key, bounds.from), implicit: !asked };
+  return {
+    key,
+    ...bounds,
+    label: presetLabel(key, bounds.from),
+    implicit: !isRangeKey(params.range),
+  };
 }

@@ -14,10 +14,22 @@ import assert from "node:assert/strict";
 
 import ExcelJS from "exceljs";
 
-import { accountGroup, toEnteredBalance, toStoredBalance } from "../src/lib/accounts";
+import { readFileSync } from "node:fs";
+
+import {
+  accountGroup,
+  ACCOUNT_TYPES,
+  crossesSign,
+  toEnteredBalance,
+  toStoredBalance,
+} from "../src/lib/accounts";
 import { safeNext } from "../src/lib/auth";
 import {
+  adjustmentFor,
+  beforeOpening,
+  bucketMonthly,
   computePositions,
+  gainPercent,
   netWorthSeries,
   runningBalances,
   sumNetWorth,
@@ -27,11 +39,13 @@ import {
 } from "../src/lib/balances";
 import { csvCell, toCsv } from "../src/lib/csv";
 import { endOfDay, monthsBetween, parseDay } from "../src/lib/date";
+import { SHARED, whereFromFilter } from "../src/lib/filters";
 import { formatMoney, MAX_AMOUNT_CENTS, parseAmount, sumToPaise, toPaise } from "../src/lib/money";
 import { fyLabel, fyStartYear, periodBounds, resolvePeriod } from "../src/lib/period";
-import { hit, memoryStore } from "../src/lib/rate-limit";
+import { DEFAULT_RANGE, rangeBounds, resolveRange } from "../src/lib/range";
+import { hit, memoryStore, reset } from "../src/lib/rate-limit";
 import { isReportable, readTxnForm, signedEffects, txnColumns } from "../src/lib/txn";
-import { buildWorkbook } from "../src/lib/workbook";
+import { buildWorkbook, toRupees } from "../src/lib/workbook";
 
 type Case =
   | { kind: "section"; label: string }
@@ -104,6 +118,11 @@ function transfer(
   date: string,
 ): TxnLite & { id: string } {
   return { id, kind: "TRANSFER", amountCents: rupees(amount), accountId: from, toAccountId: to, date: day(date) };
+}
+
+/** A valuation; `recordedAt` defaults to its own date, to break same-date ties explicitly. */
+function val(accountId: string, date: string, valueCents: number, recordedAt?: Date): ValuationLite {
+  return { accountId, date: day(date), valueCents, createdAt: recordedAt ?? day(date) };
 }
 
 const NOW = endOfDay(day("2026-10-18"));
@@ -206,8 +225,8 @@ test("current value is the latest valuation plus later SIPs; gain is current min
     transfer("sip3", "sav", "mf", 10_000, "2026-05-05"),
   ];
   const valuations: ValuationLite[] = [
-    { accountId: "mf", date: day("2026-03-31"), valueCents: rupees(1_15_000) },
-    { accountId: "mf", date: day("2026-04-30"), valueCents: rupees(1_28_000) },
+    val("mf", "2026-03-31", rupees(1_15_000)),
+    val("mf", "2026-04-30", rupees(1_28_000)),
   ];
   const p = positionsAt(txns, valuations).positions.get("mf")!;
   assert.equal(p.book, rupees(1_30_000), "opening 1,00,000 plus three SIPs");
@@ -219,13 +238,13 @@ test("current value is the latest valuation plus later SIPs; gain is current min
 test("a valuation includes entries dated the same day", () => {
   const p = positionsAt(
     [transfer("sip", "sav", "mf", 10_000, "2026-04-30")],
-    [{ accountId: "mf", date: day("2026-04-30"), valueCents: rupees(1_12_000) }],
+    [val("mf", "2026-04-30", rupees(1_12_000))],
   ).positions.get("mf")!;
   assert.equal(p.current, rupees(1_12_000), "the same-day SIP is not added on top");
 });
 
 test("valuations are ignored on bank accounts", () => {
-  const p = positionsAt([], [{ accountId: "sav", date: day("2026-02-01"), valueCents: 1 }]).positions.get("sav")!;
+  const p = positionsAt([], [val("sav", "2026-02-01", 1)]).positions.get("sav")!;
   assert.equal(p.current, rupees(50_000));
 });
 
@@ -239,7 +258,7 @@ test("a liability valuation sets what is owed", () => {
   const positions = computePositions(
     [loan],
     [],
-    [{ accountId: "loan", date: day("2026-06-30"), valueCents: -rupees(4_60_000) }],
+    [val("loan", "2026-06-30", -rupees(4_60_000))],
     NOW,
   );
   const nw = sumNetWorth([loan], positions);
@@ -267,7 +286,7 @@ test("entries after the as-of date and accounts not yet opened do not count", ()
 test("net worth splits into liquid, investments and liabilities", () => {
   const { nw } = positionsAt(
     [expense("e", "card", 2_000, "2026-03-01")],
-    [{ accountId: "mf", date: day("2026-06-30"), valueCents: rupees(1_05_000) }],
+    [val("mf", "2026-06-30", rupees(1_05_000))],
   );
   assert.equal(nw.liquid, rupees(50_000));
   assert.equal(nw.investments, rupees(1_05_000));
@@ -276,35 +295,163 @@ test("net worth splits into liquid, investments and liabilities", () => {
   assert.equal(nw.total, nw.liquid + nw.investments + nw.liabilities);
 });
 
-test("the net-worth series agrees with a direct computation at each point", () => {
+test("the net-worth series is right at every month end", () => {
   const txns = [
     income("sal", "sav", 80_000, "2026-02-01"),
     transfer("sip", "sav", "mf", 10_000, "2026-03-05"),
     expense("e", "card", 3_000, "2026-03-20"),
   ];
-  const valuations: ValuationLite[] = [{ accountId: "mf", date: day("2026-03-31"), valueCents: rupees(1_13_000) }];
+  // Dated between two points, so March and April must differ by exactly the fund's gain.
+  const valuations: ValuationLite[] = [val("mf", "2026-04-15", rupees(1_13_000))];
   const points = monthsBetween(day("2026-01-01"), day("2026-04-01")).map((m) => m.end);
-  const series = netWorthSeries(ALL, txns, valuations, points);
-  assert.equal(series.length, 4);
-  points.forEach((p, i) => {
-    const direct = sumNetWorth(ALL, computePositions(ALL, txns, valuations, p));
-    assert.deepEqual(series[i], direct);
-  });
-  assert.equal(series[0].total, rupees(1_50_000));
-  assert.equal(series[2].total, rupees(1_50_000 + 80_000 - 10_000 - 3_000 + 1_13_000 - 1_00_000));
+  const totals = netWorthSeries(ALL, txns, valuations, points).map((w) => w.total);
+  assert.deepEqual(totals, [
+    rupees(1_50_000), // January: the three opening balances
+    rupees(2_30_000), // February: plus salary
+    rupees(2_27_000), // March: the SIP moves money, the card spend is owed
+    rupees(2_30_000), // April: the fund is valued 3,000 above the 1,10,000 put in
+  ]);
 });
 
-test("running balances end at the book balance", () => {
+test("running balances: transfers in and out, deleted entries skipped, ending at book", () => {
   const txns = [
     income("a", "sav", 1_000, "2026-02-01"),
     transfer("b", "sav", "mf", 300, "2026-02-02"),
-    expense("c", "sav", 200, "2026-02-03"),
+    { ...expense("x", "sav", 999, "2026-02-02"), deletedAt: new Date() },
+    transfer("c", "mf", "sav", 50, "2026-02-03"),
+    expense("d", "sav", 200, "2026-02-04"),
   ];
   const running = runningBalances(SAVINGS, txns);
   assert.equal(running.get("a"), rupees(51_000));
   assert.equal(running.get("b"), rupees(50_700));
-  assert.equal(running.get("c"), rupees(50_500));
-  assert.equal(running.get("c"), positionsAt(txns).positions.get("sav")!.book);
+  assert.equal(running.has("x"), false, "a deleted entry has no balance");
+  assert.equal(running.get("c"), rupees(50_750), "money coming back from the fund adds");
+  assert.equal(running.get("d"), rupees(50_550));
+  assert.equal(running.get("d"), positionsAt(txns).positions.get("sav")!.book);
+});
+
+test("an account with no entries has no running balances, and its book is the opening", () => {
+  assert.equal(runningBalances(SAVINGS, []).size, 0);
+  assert.equal(positionsAt([]).positions.get("sav")!.book, SAVINGS.openingBalanceCents);
+});
+
+test("two valuations on the same date: the one recorded last wins, in any order", () => {
+  const typo = val("mf", "2026-04-30", rupees(12_00_000), new Date(2026, 4, 1, 9, 0));
+  const fixed = val("mf", "2026-04-30", rupees(1_20_000), new Date(2026, 4, 1, 9, 5));
+  for (const order of [[typo, fixed], [fixed, typo]]) {
+    const p = positionsAt([], order).positions.get("mf")!;
+    assert.equal(p.current, rupees(1_20_000), "the correction, whichever way round they come");
+  }
+});
+
+test("a valuation then later flows: spends add to a card's debt, redemptions leave a fund", () => {
+  const card = positionsAt(
+    [expense("late", "card", 500, "2026-07-10")],
+    [val("card", "2026-06-30", -rupees(2_000))],
+  ).positions.get("card")!;
+  assert.equal(card.current, -rupees(2_500));
+  assert.equal(card.valuedAt?.getTime(), day("2026-06-30").getTime());
+
+  const fund = positionsAt(
+    [transfer("redeem", "mf", "sav", 20_000, "2026-07-10")],
+    [val("mf", "2026-06-30", rupees(1_25_000))],
+  ).positions.get("mf")!;
+  assert.equal(fund.current, rupees(1_05_000));
+});
+
+test("gain as a percentage: none for debts, none before a valuation, signed otherwise", () => {
+  const p = (book: number, gain: number, valued = true) => ({
+    book,
+    current: book + gain,
+    gain,
+    valuedAt: valued ? new Date() : null,
+  });
+  assert.equal(gainPercent(p(1000, 100)), "+10.0%");
+  assert.equal(gainPercent(p(1000, -50)), "-5.0%");
+  assert.equal(gainPercent(p(1000, 100, false)), null);
+  assert.equal(gainPercent(p(-5000, 100)), null, "a percentage of a debt means nothing");
+});
+
+// --------------------------------------------------------------------------------------
+section("Opening dates");
+
+test("an entry before the opening date is caught, compared by calendar day", () => {
+  assert.equal(beforeOpening(day("2025-12-31"), SAVINGS), true);
+  assert.equal(beforeOpening(day("2026-01-01"), SAVINGS), false, "the opening day itself is fine");
+  assert.equal(
+    beforeOpening(new Date(2026, 0, 1, 0, 5), SAVINGS),
+    false,
+    "just after midnight on the opening day is still that day, though before the stored midday",
+  );
+});
+
+test("the double count the guard exists to prevent", () => {
+  // Set up on 1 Jan with ₹50,000, which already reflects December's spending. An entry dated
+  // in December would come off a second time: this is what saving one would do.
+  const backfilled = positionsAt([expense("dec", "sav", 1_000, "2025-12-28")]);
+  assert.equal(backfilled.positions.get("sav")!.book, rupees(49_000));
+  assert.equal(beforeOpening(day("2025-12-28"), SAVINGS), true, "so the server refuses it");
+});
+
+test("a balance adjustment is the gap to the bank's figure at the end of that day", () => {
+  const txns = [
+    income("in", "sav", 1_000, "2026-03-01"),
+    transfer("back", "mf", "sav", 500, "2026-03-05"),
+    expense("same-day", "sav", 200, "2026-03-05"),
+    expense("later", "sav", 9_999, "2026-03-20"),
+  ];
+  const r = adjustmentFor(SAVINGS, txns, day("2026-03-05"), rupees(51_000));
+  assert.equal(r.book, rupees(51_300), "opening, income, transfer in and the same-day spend; not later ones");
+  assert.equal(r.diff, -rupees(300));
+  assert.equal(adjustmentFor(SAVINGS, txns, day("2026-03-05"), rupees(51_300)).diff, 0);
+  assert.equal(
+    adjustmentFor(SAVINGS, [], day("2026-03-05"), -rupees(2_000)).diff,
+    -rupees(52_000),
+    "an overdrawn account can be adjusted to a negative balance",
+  );
+});
+
+// --------------------------------------------------------------------------------------
+section("Filters and monthly totals");
+
+test("every filter excludes deleted entries", () => {
+  assert.deepEqual(whereFromFilter({}), { deletedAt: null });
+  assert.equal(whereFromFilter({ kinds: ["INCOME"], memberId: "m1" }).deletedAt, null);
+});
+
+test("Shared means no member, not a member called shared", () => {
+  assert.equal(whereFromFilter({ memberId: SHARED }).memberId, null);
+  assert.equal(whereFromFilter({ memberId: "cm123" }).memberId, "cm123");
+});
+
+test("an account filter matches either side of a transfer", () => {
+  assert.deepEqual(whereFromFilter({ accountId: "sav" }).OR, [
+    { accountId: "sav" },
+    { toAccountId: "sav" },
+  ]);
+});
+
+test("an empty list of kinds matches nothing, not everything", () => {
+  assert.deepEqual(whereFromFilter({ kinds: [] }).kind, { in: [] });
+  assert.equal(whereFromFilter({}).kind, undefined);
+});
+
+test("monthly totals ignore transfers and adjustments and keep month ends in their month", () => {
+  const months = monthsBetween(day("2026-03-01"), day("2026-04-01"));
+  const rows = [
+    { kind: "INCOME", amountCents: 100, date: day("2026-03-31") },
+    { kind: "EXPENSE", amountCents: 40, date: day("2026-03-31") },
+    { kind: "TRANSFER", amountCents: 9_999, date: day("2026-03-15") },
+    { kind: "ADJUSTMENT", amountCents: -777, date: day("2026-04-02") },
+    { kind: "EXPENSE", amountCents: 5, date: day("2026-04-01") },
+  ];
+  assert.deepEqual(
+    bucketMonthly(rows, months).map(({ income, expense }) => ({ income, expense })),
+    [
+      { income: 100, expense: 40 },
+      { income: 0, expense: 5 },
+    ],
+  );
 });
 
 // --------------------------------------------------------------------------------------
@@ -358,10 +505,17 @@ test("adjustments cannot be posted through the entry form", () => {
   assert.equal(form({ ...goodExpense, kind: "ADJUSTMENT" }).success, false);
 });
 
-test("zero, negative, garbage and oversized amounts are refused", () => {
-  for (const amount of ["0", "-5", "abc", "", String(MAX_AMOUNT_CENTS)]) {
+test("zero, negative, garbage and fractional-paisa amounts are refused", () => {
+  for (const amount of ["0", "-5", "abc", "", "1.005", "1e3"]) {
     assert.equal(form({ ...goodExpense, amount }).success, false, `amount ${JSON.stringify(amount)}`);
   }
+});
+
+test("the largest allowed amount is accepted, and one paisa more is refused", () => {
+  const max = (MAX_AMOUNT_CENTS / 100).toFixed(2);
+  assert.ok(form({ ...goodExpense, amount: max }).success, `${max} is the limit`);
+  const over = (MAX_AMOUNT_CENTS / 100).toFixed(0) + ".01";
+  assert.equal(form({ ...goodExpense, amount: over }).success, false);
 });
 
 test("an impossible date is refused", () => {
@@ -379,8 +533,28 @@ test("account types fall into the right group", () => {
 
 test("an amount owed is entered positive and stored negative, and round-trips", () => {
   assert.equal(toStoredBalance("LOAN", 500), -500);
+  assert.equal(toStoredBalance("CREDIT_CARD", 500), -500);
   assert.equal(toEnteredBalance("LOAN", toStoredBalance("LOAN", 500)), 500);
   assert.equal(toStoredBalance("SAVINGS", 500), 500);
+});
+
+test("an unknown account type is an error, not a bank account", () => {
+  assert.throws(() => accountGroup("TIMESHARE"), /Unknown account type/);
+});
+
+test("changing type between owned and owed is detected; within a side is not", () => {
+  assert.equal(crossesSign("SAVINGS", "LOAN"), true);
+  assert.equal(crossesSign("CREDIT_CARD", "MUTUAL_FUND"), true);
+  assert.equal(crossesSign("MUTUAL_FUND", "FD"), false);
+  assert.equal(crossesSign("LOAN", "CREDIT_CARD"), false);
+});
+
+test("the database allows exactly the account types the app knows", () => {
+  const sql = readFileSync(new URL("../prisma/constraints.sql", import.meta.url), "utf8");
+  const listed = sql.match(/"Account_type_check"\s+check \(type in \(([^)]*)\)/)?.[1];
+  assert.ok(listed, "constraints.sql has the account type check");
+  const inSql = [...listed!.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]).sort();
+  assert.deepEqual(inSql, ACCOUNT_TYPES.map((t) => t.key).sort());
 });
 
 // --------------------------------------------------------------------------------------
@@ -390,6 +564,25 @@ test("amounts parse to paise and format the Indian way", () => {
   assert.equal(parseAmount("₹1,23,456.78"), 12345678);
   assert.equal(formatMoney(12345678), "₹1,23,456.78");
   assert.equal(formatMoney(-500), "-₹5.00");
+});
+
+test("amounts parse from the digits, never through a float", () => {
+  assert.equal(parseAmount(".5"), 50);
+  assert.equal(parseAmount("5."), 500);
+  assert.equal(parseAmount("0.29"), 29, "0.29 * 100 is 28.999… as a float");
+  assert.equal(parseAmount("-250"), -25000);
+  assert.equal(parseAmount("1.005"), null, "no fractions of a paisa");
+  for (const bad of ["1e3", "--5", "1.2.3", ".", "-", ""]) {
+    assert.equal(parseAmount(bad), null, JSON.stringify(bad));
+  }
+});
+
+test("dates: leap years, padding and the end of a day", () => {
+  assert.ok(parseDay("2028-02-29"));
+  assert.equal(parseDay("2026-02-29"), undefined);
+  assert.equal(parseDay("2026-4-1"), undefined);
+  const end = parseDay("2026-03-31", "end")!;
+  assert.deepEqual([end.getHours(), end.getMinutes(), end.getSeconds(), end.getMilliseconds()], [23, 59, 59, 999]);
 });
 
 test("aggregates arrive as bigint and are converted, not trusted", () => {
@@ -403,9 +596,43 @@ test("the financial year runs April to March", () => {
   assert.equal(fyStartYear(day("2026-04-01")), 2026);
   assert.equal(fyLabel(2026), "FY 2026-27");
   const fy = periodBounds("fy", day("2026-10-18"));
-  assert.equal(fy.from!.getMonth(), 3);
-  assert.equal(fy.to!.getFullYear(), 2027);
-  assert.equal(fy.to!.getMonth(), 2);
+  assert.equal(fy.from!.getTime(), new Date(2026, 3, 1).getTime());
+  assert.equal(
+    fy.to!.getTime(),
+    new Date(2027, 2, 31, 23, 59, 59, 999).getTime(),
+    "the last instant of 31 March, so an entry stored at midday that day is inside",
+  );
+});
+
+test("early in the calendar year, this FY started last April", () => {
+  const feb = day("2026-02-15");
+  assert.equal(periodBounds("fy", feb).from!.getTime(), new Date(2025, 3, 1).getTime());
+  assert.equal(periodBounds("lastfy", feb).from!.getTime(), new Date(2024, 3, 1).getTime());
+  const twelve = periodBounds("12m", feb);
+  assert.equal(twelve.from!.getTime(), new Date(2025, 2, 1).getTime(), "March last year to February");
+});
+
+test("a report with only one date given is open at the other end", () => {
+  const since = resolvePeriod({ from: "2026-01-01" });
+  assert.equal(since.to, undefined);
+  assert.match(since.label, /^since/);
+  const upTo = resolvePeriod({ to: "2026-01-31" });
+  assert.equal(upTo.from, undefined);
+  assert.match(upTo.label, /^up to/);
+});
+
+test("transaction windows: day counts, month-end clamping, January's last month, defaults", () => {
+  const at = day("2026-08-31");
+  assert.equal(rangeBounds("10d", at).from!.getTime(), new Date(2026, 7, 22).getTime(), "today counts as one of the ten");
+  assert.equal(rangeBounds("6m", at).from!.getTime(), new Date(2026, 1, 28).getTime(), "31 Aug minus six months is 28 Feb");
+  const jan = rangeBounds("lastmonth", day("2026-01-10"));
+  assert.equal(jan.from!.getTime(), new Date(2025, 11, 1).getTime());
+  assert.equal(jan.to!.getTime(), new Date(2025, 11, 31, 23, 59, 59, 999).getTime());
+  const unknown = resolveRange({ range: "fortnight" }, at);
+  assert.equal(unknown.key, DEFAULT_RANGE);
+  assert.equal(unknown.implicit, true);
+  const badFrom = resolveRange({ range: "1y", from: "not-a-date" }, at);
+  assert.equal(badFrom.key, "1y", "an unreadable date counts as absent");
 });
 
 test("explicit report dates beat a preset; bad ones are reported back", () => {
@@ -432,6 +659,12 @@ test("CSV quotes what needs quoting and defuses formulas", () => {
   assert.equal(toCsv([["a", "b"], [1, null]]), "a,b\r\n1,\r\n");
 });
 
+test("CSV: a formula that also needs quoting, a dash, and a note over two lines", () => {
+  assert.equal(csvCell("=a,b"), `"'=a,b"`);
+  assert.equal(csvCell("-refund"), "'-refund");
+  assert.equal(csvCell("line one\nline two"), '"line one\nline two"');
+});
+
 test("the workbook carries real numbers and the period in its summary", async () => {
   const wb = buildWorkbook({
     periodLabel: "October 2026",
@@ -444,14 +677,14 @@ test("the workbook carries real numbers and the period in its summary", async ()
         account: "HDFC",
         toAccount: "",
         member: "Shared",
-        amount: 1250.5,
+        amount: toRupees(125050),
         notes: "",
       },
     ],
-    totals: { income: 0, expense: 1250.5 },
-    expenseByCategory: [{ name: "Groceries", amount: 1250.5 }],
+    totals: { income: toRupees(0), expense: toRupees(125050) },
+    expenseByCategory: [{ name: "Groceries", amount: toRupees(125050) }],
     incomeByCategory: [],
-    expenseByMember: [{ name: "Shared", amount: 1250.5 }],
+    expenseByMember: [{ name: "Shared", amount: toRupees(125050) }],
     accounts: [],
   });
   const buf = await wb.xlsx.writeBuffer();
@@ -472,14 +705,36 @@ test("the throttle blocks after the limit and says how long to wait", async () =
   for (let i = 0; i < 3; i++) assert.ok((await hit(store, "k", opts)).ok);
   const blocked = await hit(store, "k", opts);
   assert.equal(blocked.ok, false);
-  assert.ok(blocked.retryAfter > 0);
+  assert.ok(blocked.retryAfter > 0 && blocked.retryAfter <= 60, `waits ${blocked.retryAfter}s`);
+});
+
+test("the throttle: keys are separate, a reset clears one, and a window runs out", async () => {
+  const store = memoryStore();
+  const opts = { limit: 1, windowMs: 1 };
+  assert.ok((await hit(store, "a", opts)).ok);
+  assert.ok((await hit(store, "b", opts)).ok, "another key has its own budget");
+  await reset(store, "a");
+  assert.ok((await hit(store, "a", opts)).ok, "a reset starts the key again");
+  await new Promise((r) => setTimeout(r, 5));
+  assert.ok((await hit(store, "b", opts)).ok, "an expired window counts from zero");
 });
 
 test("redirects after sign-in stay on this site", () => {
   assert.equal(safeNext("/accounts"), "/accounts");
+  assert.equal(safeNext("/transactions?range=1y&q=rent"), "/transactions?range=1y&q=rent");
   assert.equal(safeNext("//evil.example.com"), "/");
   assert.equal(safeNext("https://evil.example.com"), "/");
   assert.equal(safeNext("/\\evil.example.com"), "/");
+  assert.equal(safeNext("accounts"), "/");
+});
+
+test("redirects: tabs and line breaks cannot smuggle in another site", () => {
+  // URL parsers drop these characters, so each of these would otherwise become
+  // //evil.example.com — another site — after passing a prefix check.
+  for (const sneaky of ["/\t/evil.example.com", "/\n/evil.example.com", "/\r/evil.example.com", "/%09/x"]) {
+    const out = safeNext(sneaky);
+    assert.equal(new URL(out, "https://home.example").host, "home.example", `${JSON.stringify(sneaky)} -> ${out}`);
+  }
 });
 
 run().catch((err) => {

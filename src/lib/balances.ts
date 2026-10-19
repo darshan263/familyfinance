@@ -19,6 +19,10 @@ import { signedEffects, type TxnMovement } from "./txn";
  *
  * Entries dated after `asOf` are not counted. Callers asking "what is there now" pass the
  * end of today, so an entry dated today counts and one dated next week waits for its date.
+ *
+ * The opening balance is the balance *on* the opening date, so it already contains everything
+ * that happened before. An entry dated earlier would be counted twice; the server actions
+ * refuse them (see `beforeOpening`), and the engine relies on that rather than second-guessing.
  */
 
 export interface AccountLite {
@@ -39,6 +43,8 @@ export interface ValuationLite {
   date: Date;
   /** Same sign convention as the opening balance. */
   valueCents: number;
+  /** When it was recorded. Breaks a tie between two valuations on the same date. */
+  createdAt: Date;
 }
 
 export interface Position {
@@ -79,6 +85,20 @@ function valuationsByAccount(valuations: ValuationLite[]): Map<string, Valuation
   return out;
 }
 
+function laterValuation(a: ValuationLite, b: ValuationLite): boolean {
+  const byDate = a.date.getTime() - b.date.getTime();
+  return byDate !== 0 ? byDate > 0 : a.createdAt.getTime() > b.createdAt.getTime();
+}
+
+/**
+ * Whether `date` falls on a day before the account's opening date, compared as calendar days
+ * so the time of day either was stored at cannot matter.
+ */
+export function beforeOpening(date: Date, account: { openingDate: Date }): boolean {
+  const day = (d: Date) => d.getFullYear() * 10_000 + (d.getMonth() + 1) * 100 + d.getDate();
+  return day(date) < day(account.openingDate);
+}
+
 function positionOf(
   account: AccountLite,
   flows: Flow[],
@@ -94,12 +114,13 @@ function positionOf(
     return { book, current: book, gain: 0, valuedAt: null };
   }
 
-  // The latest valuation on or before asOf. On a tie of dates the later one in the list wins,
-  // which is the order they were recorded in.
+  // The latest valuation on or before asOf. Two on the same date (a typo corrected the same
+  // day) are settled by which was recorded last, never by the order the caller passed them in:
+  // pages load valuations in different orders, and they must all agree.
   let latest: ValuationLite | null = null;
   for (const v of valuations) {
-    const at = v.date.getTime();
-    if (at <= asOf && (!latest || at >= latest.date.getTime())) latest = v;
+    if (v.date.getTime() > asOf) continue;
+    if (!latest || laterValuation(v, latest)) latest = v;
   }
 
   if (!latest) return { book, current: book, gain: 0, valuedAt: null };
@@ -186,31 +207,66 @@ export function netWorthSeries(
 /**
  * One account's book balance after each of its entries, for the history on its page.
  *
- * `txns` must already be in date order, oldest first. The opening balance joins at its own
- * date, the same rule `computePositions` uses, so the last figure here and the account's book
- * balance agree.
+ * `txns` must already be in date order, oldest first. It starts from the opening balance,
+ * which is safe because no entry is allowed to predate it. The figure after the last entry
+ * dated on or before a day equals `computePositions(…, endOfDay(that day)).book`.
  */
 export function runningBalances(
   account: AccountLite,
   txns: (TxnLite & { id: string })[],
 ): Map<string, number> {
   const out = new Map<string, number>();
-  const openingAt = account.openingDate.getTime();
-  let opened = false;
-  let balance = 0;
+  let balance = account.openingBalanceCents;
   for (const t of txns) {
     if (t.deletedAt) continue;
-    if (!opened && t.date.getTime() >= openingAt) {
-      balance += account.openingBalanceCents;
-      opened = true;
-    }
     for (const e of signedEffects(t)) if (e.accountId === account.id) balance += e.deltaCents;
     out.set(t.id, balance);
   }
   return out;
 }
 
-/** Gain as a percentage of what went in, e.g. "+8.3%". Null until there is a valuation. */
+/**
+ * The adjustment that brings a bank or cash account to `target` on `date`: the difference
+ * between what the bank says and the book balance at the end of that day. Zero means it
+ * already matches. Entries dated later are not part of it; they still apply on top.
+ */
+export function adjustmentFor(
+  account: AccountLite,
+  txns: TxnLite[],
+  date: Date,
+  target: number,
+): { book: number; diff: number } {
+  const endOfThatDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+  const book = computePositions([account], txns, [], endOfThatDay).get(account.id)!.book;
+  return { book, diff: target - book };
+}
+
+/**
+ * Income and expense per month, from rows that may include any kind: transfers and
+ * adjustments are skipped here as well as by the query, so widening the query can never turn
+ * a SIP into spending.
+ */
+export function bucketMonthly(
+  rows: { kind: string; amountCents: number; date: Date }[],
+  months: { start: Date; end: Date }[],
+): { start: Date; income: number; expense: number }[] {
+  return months.map(({ start, end }) => {
+    let income = 0;
+    let expense = 0;
+    for (const r of rows) {
+      if (r.date < start || r.date > end) continue;
+      if (r.kind === "INCOME") income += r.amountCents;
+      else if (r.kind === "EXPENSE") expense += r.amountCents;
+    }
+    return { start, income, expense };
+  });
+}
+
+/**
+ * Gain as a percentage of what went in, e.g. "+8.3%". Null until there is a valuation, and
+ * whenever what went in is zero or less — which includes every card and loan, where a
+ * percentage of a debt would mean nothing.
+ */
 export function gainPercent(p: Position): string | null {
   if (p.book <= 0 || p.valuedAt === null) return null;
   const pct = (p.gain / p.book) * 100;

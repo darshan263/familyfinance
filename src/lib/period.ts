@@ -2,8 +2,8 @@ import { endOfMonth, formatDate, readDayParam, startOfMonth } from "./date";
 
 /**
  * The periods on the Reports page. Unlike the rolling windows on Transactions, these are
- * calendar periods, bounded at both ends, because a report compares like with like: a month,
- * a financial year.
+ * calendar periods, bounded at both ends (all but "All time"), because a report compares like
+ * with like: a month, a financial year.
  *
  * The financial year is India's, April to March, since that is the year tax, Form 16 and
  * most investment statements are reckoned in.

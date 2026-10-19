@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Notice } from "@/components/Notice";
 import { safeNext } from "@/lib/auth";
 import { getHouseholdName } from "@/lib/queries";
 import { getCurrentUser, needsSetup } from "@/lib/session";
@@ -10,12 +11,12 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; reason?: string }>;
 }) {
   if (await needsSetup()) redirect("/setup");
   if (await getCurrentUser()) redirect("/");
 
-  const { next } = await searchParams;
+  const { next, reason } = await searchParams;
   const householdName = await getHouseholdName();
 
   return (
@@ -33,6 +34,15 @@ export default async function LoginPage({
             Sign in to FamilyFinance
           </p>
         </header>
+
+        {reason === "unsaved" && (
+          <div className="mb-4">
+            <Notice tone="warn">
+              You were signed out — perhaps the password was changed on another device — so your
+              last change was not saved. Sign in and make it again.
+            </Notice>
+          </div>
+        )}
 
         <LoginForm next={safeNext(next)} />
       </div>

@@ -15,8 +15,25 @@ export interface LoginState {
   error?: string;
 }
 
-/** Ten tries per account, and per source address where one can be trusted, every 15 minutes. */
-const THROTTLE = { limit: 10, windowMs: 15 * 60 * 1000 };
+const MINUTES = 60 * 1000;
+
+/**
+ * Sign-in limits. There is only one login, so a limit keyed on the email alone is a switch
+ * anyone who knows the address can flip: ten wrong guesses and the household is locked out.
+ * Where the client's address can be trusted, the tight limit is per email *and* address, so it
+ * only ever stops the person guessing; a per-address limit stops one machine spraying; and a
+ * generous per-email limit remains as the backstop against guesses spread over many machines.
+ * Without a trustworthy address there is nothing to tell people apart, so the email gets the
+ * tight limit.
+ */
+function throttles(email: string, address: string | null) {
+  if (!address) return [{ key: `login:email:${email}`, limit: 10, windowMs: 15 * MINUTES }];
+  return [
+    { key: `login:pair:${email}|${address}`, limit: 10, windowMs: 15 * MINUTES },
+    { key: `login:ip:${address}`, limit: 30, windowMs: 15 * MINUTES },
+    { key: `login:email:${email}`, limit: 200, windowMs: 60 * MINUTES },
+  ];
+}
 
 let proxyWarned = false;
 
@@ -59,12 +76,9 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
   if (!email || !password) return { error: "Enter your email and password" };
 
-  const address = await clientAddress();
-  const keys = [`login:email:${email}`];
-  if (address) keys.push(`login:ip:${address}`);
-
-  for (const key of keys) {
-    const check = await hit(dbStore, key, THROTTLE);
+  const limits = throttles(email, await clientAddress());
+  for (const { key, limit, windowMs } of limits) {
+    const check = await hit(dbStore, key, { limit, windowMs });
     if (!check.ok) return { error: waitMessage(check.retryAfter) };
   }
 
@@ -77,7 +91,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
   if (!user || !ok) return { error: "Wrong email or password" };
 
-  for (const key of keys) await reset(dbStore, key);
+  for (const { key } of limits) await reset(dbStore, key);
 
   try {
     await startSession(user);
@@ -92,13 +106,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     };
   }
 
-  // The cookie is already set, so the sign-in has happened whatever follows. A failure
-  // writing the audit row must not strand someone who is, in fact, signed in.
-  try {
-    await logActivity("AUTH", "signed in");
-  } catch (err) {
-    console.error("[familyfinance] could not record the sign-in:", err);
-  }
+  // Best-effort (see logActivity): the cookie is already set, so the sign-in has happened.
+  await logActivity("AUTH", "signed in");
 
   redirect(next);
 }

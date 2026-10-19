@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/db";
 import { logActivity, setSetting, SETTING_KEYS } from "@/lib/queries";
-import { requireUser, startSession } from "@/lib/session";
+import { requireUserToChange, startSession } from "@/lib/session";
 
 function back(outcome: string): never {
   revalidatePath("/", "layout");
@@ -14,7 +14,7 @@ function back(outcome: string): never {
 }
 
 export async function renameHousehold(formData: FormData): Promise<void> {
-  await requireUser();
+  await requireUserToChange();
   const name = String(formData.get("householdName") ?? "").trim();
   if (!name || name.length > 60) back("error=household");
   await setSetting(SETTING_KEYS.householdName, name);
@@ -28,11 +28,30 @@ export interface PasswordState {
 }
 
 /**
- * Change the login. Bumping tokenVersion signs out every other session at once, including on
- * a phone left signed in somewhere; this one gets a fresh cookie so it stays signed in.
+ * Sign out every device except this one, without changing the password — for a lost phone
+ * or a browser you forgot to sign out of. Bumping tokenVersion retires every existing cookie;
+ * this device gets a fresh one.
+ *
+ * Signing out does not do this on its own, deliberately: the household shares one login, so
+ * pressing Sign out on one phone would also sign out everyone else's.
+ */
+export async function signOutOtherDevices(): Promise<void> {
+  const user = await requireUserToChange();
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { tokenVersion: { increment: 1 } },
+  });
+  await startSession(updated);
+  await logActivity("AUTH", "signed out all other devices");
+  back("saved=devices");
+}
+
+/**
+ * Change the password. Bumping tokenVersion signs out every other session at once, including
+ * on a phone left signed in somewhere; this one gets a fresh cookie so it stays signed in.
  */
 export async function changePassword(_prev: PasswordState, formData: FormData): Promise<PasswordState> {
-  const user = await requireUser();
+  const user = await requireUserToChange();
   const current = String(formData.get("current") ?? "");
   const next = String(formData.get("next") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
@@ -51,7 +70,7 @@ export async function changePassword(_prev: PasswordState, formData: FormData): 
 }
 
 export async function addCategory(formData: FormData): Promise<void> {
-  await requireUser();
+  await requireUserToChange();
   const name = String(formData.get("name") ?? "").trim();
   const kind = String(formData.get("kind") ?? "");
   if (!name || name.length > 40 || (kind !== "EXPENSE" && kind !== "INCOME")) back("error=category");
@@ -66,7 +85,7 @@ export async function addCategory(formData: FormData): Promise<void> {
 }
 
 export async function renameCategory(formData: FormData): Promise<void> {
-  await requireUser();
+  await requireUserToChange();
   const id = String(formData.get("categoryId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const existing = id ? await prisma.category.findUnique({ where: { id } }) : null;
@@ -85,12 +104,15 @@ export async function renameCategory(formData: FormData): Promise<void> {
 /**
  * Archive a category that has entries; delete one that has none. Deleting a used category
  * would leave its entries "Uncategorised" and quietly reshape every past report.
+ *
+ * Only live entries count. Deleted ones no longer appear in any report, so a category used
+ * only by them can go; their link to it is cleared (the relation is `onDelete: SetNull`).
  */
 export async function removeCategory(formData: FormData): Promise<void> {
-  await requireUser();
+  await requireUserToChange();
   const id = String(formData.get("categoryId") ?? "");
   const existing = id
-    ? await prisma.category.findUnique({ where: { id }, include: { _count: { select: { transactions: true } } } })
+    ? await prisma.category.findUnique({ where: { id }, include: { _count: { select: { transactions: { where: { deletedAt: null } } } } } })
     : null;
   if (!existing) back("error=missing");
 

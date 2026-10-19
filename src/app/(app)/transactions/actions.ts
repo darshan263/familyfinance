@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { beforeOpening } from "@/lib/balances";
+import { formatDate } from "@/lib/date";
 import { prisma } from "@/lib/db";
 import { formatMoney, toCents } from "@/lib/money";
 import { logActivity } from "@/lib/queries";
-import { requireUser } from "@/lib/session";
+import { requireUserToChange } from "@/lib/session";
 import { KIND_LABELS, readTxnForm, txnColumns, type TxnInput } from "@/lib/txn";
 
 export interface SaveState {
@@ -16,13 +18,26 @@ export interface SaveState {
 /**
  * The form only offers what exists, but a form is only a suggestion: check every id it sent
  * actually names something, and that a category belongs to the kind of entry it is on.
+ *
+ * Also refuse an entry dated before an account started being tracked. That account's opening
+ * balance already includes everything before its opening date, so the entry would be counted
+ * twice — and back-filling the days before setup is the first thing most people try.
  */
 async function checkReferences(input: TxnInput): Promise<string | null> {
   const ids = [input.accountId, input.kind === "TRANSFER" ? input.toAccountId : null].filter(
     (id): id is string => Boolean(id),
   );
-  const found = await prisma.account.count({ where: { id: { in: ids } } });
-  if (found !== new Set(ids).size) return "That account no longer exists. Reload and pick again.";
+  const accounts = await prisma.account.findMany({ where: { id: { in: ids } } });
+  if (accounts.length !== new Set(ids).size) return "That account no longer exists. Reload and pick again.";
+
+  const early = accounts.find((a) => beforeOpening(input.date, a));
+  if (early) {
+    return (
+      `${early.name} is tracked from ${formatDate(early.openingDate)}, and its opening balance ` +
+      `already includes anything earlier. To record this entry, first move the account's ` +
+      `start date back (and set the balance it had then) on its Accounts page.`
+    );
+  }
 
   if (input.kind !== "TRANSFER") {
     const category = await prisma.category.findUnique({ where: { id: input.categoryId } });
@@ -39,7 +54,7 @@ async function checkReferences(input: TxnInput): Promise<string | null> {
 }
 
 export async function saveTransaction(_prev: SaveState, formData: FormData): Promise<SaveState> {
-  await requireUser();
+  await requireUserToChange();
 
   const parsed = readTxnForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the entry" };
@@ -77,7 +92,7 @@ export async function saveTransaction(_prev: SaveState, formData: FormData): Pro
  * commandeered by React for the action id, so an id carried there never arrives.
  */
 export async function deleteTransaction(formData: FormData): Promise<void> {
-  await requireUser();
+  await requireUserToChange();
 
   const id = String(formData.get("entryId") ?? "");
   if (!id) redirect("/transactions?deleted=failed");

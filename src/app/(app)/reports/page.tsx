@@ -10,6 +10,7 @@ import { accountGroup, accountTypeLabel } from "@/lib/accounts";
 import { gainPercent } from "@/lib/balances";
 import { formatDate, formatMonth, monthsBetween, toDateInput } from "@/lib/date";
 import { PERIODS, resolvePeriod } from "@/lib/period";
+import { requireUser } from "@/lib/session";
 import {
   getEarliestEntryDate,
   getPositions,
@@ -29,6 +30,7 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<{ period?: string; from?: string; to?: string }>;
 }) {
+  await requireUser();
   const sp = await searchParams;
   const period = resolvePeriod(sp);
   const filter = { from: period.from, to: period.to };
@@ -46,7 +48,12 @@ export default async function ReportsPage({
 
   const chartFrom = period.from ?? earliest ?? new Date();
   const chartTo = period.to && period.to < new Date() ? period.to : new Date();
-  const allMonths = chartFrom <= chartTo ? monthsBetween(chartFrom, chartTo) : [];
+  // Calendar months, trimmed to the period at both ends: a range starting on the 15th must
+  // not chart the 1st to the 14th, which the totals above leave out.
+  const allMonths = (chartFrom <= chartTo ? monthsBetween(chartFrom, chartTo) : []).map((m) => ({
+    start: period.from && m.start < period.from ? period.from : m.start,
+    end: period.to && m.end > period.to ? period.to : m.end,
+  }));
   const months = allMonths.slice(-MAX_MONTHS);
   const flow = await monthlyIncomeExpense(months);
 

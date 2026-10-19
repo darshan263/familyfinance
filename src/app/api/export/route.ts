@@ -9,15 +9,12 @@ import {
   sumIncomeExpense,
   type TxnFilter,
 } from "@/lib/queries";
-import { resolveRange } from "@/lib/range";
+import { isRangeKey, resolveRange } from "@/lib/range";
 import { requireUser } from "@/lib/session";
 import { isTxnKind, KIND_LABELS, type TxnKind } from "@/lib/txn";
-import { buildWorkbook, type EntryRow } from "@/lib/workbook";
+import { buildWorkbook, toRupees, type EntryRow } from "@/lib/workbook";
 
 export const dynamic = "force-dynamic";
-
-/** Paise to rupees, so a cell holds a real number. */
-const toRupees = (cents: number) => cents / 100;
 
 /** `familyfinance-2026-04-01-to-2027-03-31.xlsx`, or `familyfinance-all-to-<today>.csv`. */
 function exportFilename(from: Date | undefined, to: Date | undefined, ext: string): string {
@@ -50,13 +47,28 @@ export async function GET(request: Request) {
     );
   }
 
-  // Same resolution as the Transactions page, so Export means what is on screen.
-  const range = resolveRange({ range: sp.get("range"), from: sp.get("from"), to: sp.get("to") });
+  // The same rule for a preset or kind this code does not know: ignored, either would widen
+  // the export — an unknown kind to every kind, an unknown window to the default one.
+  const rangeParam = sp.get("range");
   const kind = sp.get("kind");
+  const unknown = [
+    rangeParam && !isRangeKey(rangeParam) ? `range=${rangeParam}` : null,
+    kind && !isTxnKind(kind) ? `kind=${kind}` : null,
+  ].filter(Boolean);
+  if (unknown.length > 0) {
+    return new Response(
+      `Not exporting: ${unknown.join(" and ")} ${unknown.length > 1 ? "are" : "is"} not ` +
+        `something this export understands, and ignoring it would have widened what you get.`,
+      { status: 400, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+    );
+  }
+
+  // Same resolution as the Transactions page, so Export means what is on screen.
+  const range = resolveRange({ range: rangeParam, from: sp.get("from"), to: sp.get("to") });
   const filter: TxnFilter = {
     from: range.from,
     to: range.to,
-    kinds: isTxnKind(kind) ? [kind as TxnKind] : undefined,
+    kinds: kind && isTxnKind(kind) ? [kind] : undefined,
     accountId: sp.get("account") || undefined,
     categoryId: sp.get("category") || undefined,
     memberId: sp.get("member") || undefined,
@@ -130,7 +142,7 @@ export async function GET(request: Request) {
         owner: a.owner?.name ?? "Joint",
         book: shown(p.book),
         current: shown(p.current),
-        gain: accountGroup(a.type) === "INVESTMENT" ? toRupees(p.gain) : 0,
+        gain: accountGroup(a.type) === "INVESTMENT" ? toRupees(p.gain) : toRupees(0),
       };
     }),
   });

@@ -12,12 +12,15 @@ An entry with no member is **Shared**.
 
 FamilyFinance needs a Postgres database. Supabase's or Neon's free tier is plenty.
 
-Fill in `DATABASE_URL` and `DIRECT_URL` in `.env` (see `.env.example` for which connection
-string goes where). `.env` already has freshly generated `AUTH_SECRET` and `CRON_SECRET`.
+Copy `.env.example` to `.env`, fill in `DATABASE_URL` and `DIRECT_URL` (the file says which
+connection string goes where), and generate `AUTH_SECRET` and `CRON_SECRET` with the command
+shown there. `.env` is never committed.
 
 ```bash
 npm install
 npx prisma db push     # creates the tables
+set -a; . ./.env; set +a                                                  # DIRECT_URL into the shell
+npx prisma db execute --url "$DIRECT_URL" --file prisma/constraints.sql   # database-level rules
 npm run dev            # http://localhost:3000
 ```
 
@@ -72,8 +75,16 @@ statement now and then.
 
 **Net worth** = bank & cash + investments at current value − what is owed on cards and loans.
 
-Money is stored as whole paise (64-bit integers), never floating point. Deleting an entry is a
-soft delete: it stops counting everywhere but stays in the database.
+**Start dates.** Each account is tracked from its start date, and its opening balance is the
+balance on that day, so it already includes everything before it. An entry, value update or
+adjustment dated earlier is refused, because it would be counted twice. To record older
+entries, move the account's start date back and set the balance it had then.
+
+Money is stored as whole paise (64-bit integers), never floating point; an amount with more
+than two decimal places is refused rather than rounded. Deleting an entry is a soft delete: it
+stops counting everywhere but stays in the database. The database itself also refuses rows
+that break the rules above (an unknown kind, a transfer without a destination, a zero
+amount), through the CHECK constraints in `prisma/constraints.sql`.
 
 ### Time zone
 
@@ -87,14 +98,19 @@ yesterday until 5:30 am. Set `APP_TIMEZONE` to use another zone.
   net-worth trend, 12 months of money in and out, spending by category and by member, recent
   entries.
 - **Transactions**: every entry, with date windows, filters (kind, account, category, member),
-  search, and Excel/CSV export of exactly what is on screen.
+  search, and Excel/CSV export of the same window and filters (all matching entries, not just
+  the first 500 the page shows; the Excel summary sheet covers the whole window).
 - **Accounts**: grouped balances; each account's page has its history with a running
   balance, Update value (investments, cards, loans) or Adjust balance (bank, cash), and editing.
 - **Reports**: this month, last month, last 12 months, this or last financial year (April to
-  March), or any dates. Totals, savings rate, by category and by member, investment gains,
-  and export.
+  March), all time, or any dates. Totals, savings rate, by category and by member, investment
+  gains, and export.
 - **Members** and **Settings**: members, categories (archive rather than delete once used),
-  household name, password, a full export, and a log of recent changes.
+  household name, password, signing out every other device, a full export, and a log of
+  recent changes.
+
+The login is shared, so **Sign out** only signs out the device you press it on. To cut off a
+lost phone, use **Sign out all other devices** in Settings, or change the password.
 
 ## Deploying (Vercel + Supabase)
 
@@ -103,9 +119,11 @@ yesterday until 5:30 am. Set `APP_TIMEZONE` to use another zone.
    **session pooler** string (port 5432) for `DIRECT_URL`. Use the session pooler rather than
    the "direct connection" host: that host is IPv6-only and `prisma db push` often cannot reach it.
 2. From this machine, with those in `.env`: `npm run check:env`, then `npx prisma db push`.
-3. In the Supabase SQL editor, run `prisma/supabase-lockdown.sql`. Supabase otherwise exposes
-   every table, password hash included, through its public REST API. Check the Table Editor
-   shows RLS on for all nine tables.
+3. Run `prisma/supabase-lockdown.sql`, either in the Supabase SQL editor or with
+   `npx prisma db execute --url "$DIRECT_URL" --file prisma/supabase-lockdown.sql`. Supabase
+   otherwise exposes every table, password hash included, through its public REST API. Check
+   the Table Editor shows RLS on for all nine tables. Then apply `prisma/constraints.sql` the
+   same way.
 4. **Vercel**: import the project and set `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`,
    `CRON_SECRET` (use new random values for production, not the local ones) and
    `TRUST_PROXY_HEADER=true`. `vercel.json` already runs functions in Mumbai (`bom1`), next to

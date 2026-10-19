@@ -5,9 +5,10 @@
 
 /**
  * One field. Quoted when it holds a comma, quote or line break. Text that starts like a
- * formula gets a leading apostrophe: spreadsheets execute `=`, `+`, `-` and `@` cells, and a
- * description is something anyone could have typed. Numbers are written as numbers, so a
- * negative amount stays a negative amount.
+ * formula gets a leading apostrophe: spreadsheets execute cells starting `=`, `+`, `-` or
+ * `@`, and some also treat a leading tab or carriage return as the start of one. A description
+ * is something anyone could have typed. Numbers are written as numbers, so a negative amount
+ * stays a negative amount.
  */
 export function csvCell(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";

@@ -1,5 +1,5 @@
-/** Date helpers. Everything is rendered in the server's local zone, which for a
- *  single household is what people expect. */
+/** Date helpers. Everything is in the server's local zone, which src/instrumentation.ts pins
+ *  to India time (or APP_TIMEZONE) when the server starts. */
 
 /** Where in the day a parsed `yyyy-mm-dd` should land. */
 type DayEdge = "start" | "end" | "midday";
@@ -25,21 +25,6 @@ export function parseDay(
   const d = new Date(`${value}T${TIME_OF_DAY[edge]}`);
   if (Number.isNaN(d.getTime())) return undefined;
   return toDateInput(d) === value ? d : undefined;
-}
-
-/**
- * The same parse for a query parameter, where a bad value is dropped rather than handed to
- * the database — an ignored filter beats a 500 on the whole page.
- *
- * Prefer `readDayParam` at any call site that should react to a bad value. This one cannot
- * tell "no filter was asked for" from "a filter was asked for and quietly thrown away",
- * which on an export means handing someone the whole ledger when they asked for one quarter.
- */
-export function parseDayParam(
-  value: string | null | undefined,
-  edge: "start" | "end" = "start",
-): Date | undefined {
-  return parseDay(value, edge);
 }
 
 /**

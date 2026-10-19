@@ -8,6 +8,7 @@ import { PageHeader, Stat } from "@/components/PageHeader";
 import { TxnRow } from "@/components/TxnRow";
 import { netWorthSeries } from "@/lib/balances";
 import { endOfMonth, formatMonth, lastMonths, startOfMonth } from "@/lib/date";
+import { requireUser } from "@/lib/session";
 import {
   getHouseholdName,
   getPositions,
@@ -23,6 +24,7 @@ export const dynamic = "force-dynamic";
 const monthLong = new Intl.DateTimeFormat("en-IN", { month: "long" });
 
 export default async function DashboardPage() {
+  await requireUser();
   const now = new Date();
   const thisMonth = { from: startOfMonth(now), to: endOfMonth(now) };
   const months = lastMonths(12, now);

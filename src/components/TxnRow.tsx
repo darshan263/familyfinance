@@ -19,7 +19,8 @@ export interface TxnRowData {
 
 /**
  * One entry in a list. Income reads +, expense −, a transfer has no sign because it is
- * neither. `balance` is the account's running balance, shown on an account's own page.
+ * neither, and an adjustment shows its own sign. `balance` is the figure shown under the
+ * amount on an account's own page.
  *
  * `viewingAccountId` turns a transfer into + or − from that account's side.
  */

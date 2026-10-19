@@ -9,10 +9,11 @@ import { readDayParam } from "@/lib/date";
 import { getAccounts, getCategories, getMembers, getTransactions, SHARED } from "@/lib/queries";
 import { RANGES, resolveRange } from "@/lib/range";
 import { isTxnKind, KIND_LABELS, TXN_KINDS } from "@/lib/txn";
+import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-/** Enough for years of a household's entries in one window; past it the page says so. */
+/** Several months of a household's entries in one window; past it the page says so. */
 const SHOW_AT_MOST = 500;
 
 type Params = {
@@ -31,24 +32,44 @@ type Params = {
 const FILTER_KEYS = ["kind", "account", "category", "member", "q"] as const;
 
 export default async function TransactionsPage({ searchParams }: { searchParams: Promise<Params> }) {
+  await requireUser();
   const sp = await searchParams;
   const range = resolveRange(sp);
-  const kind = isTxnKind(sp.kind) ? sp.kind : undefined;
 
-  const [all, accounts, categories, members] = await Promise.all([
-    getTransactions({
-      from: range.from,
-      to: range.to,
-      kinds: kind ? [kind] : undefined,
-      accountId: sp.account || undefined,
-      categoryId: sp.category || undefined,
-      memberId: sp.member || undefined,
-      search: sp.q || undefined,
-    }),
+  const [accounts, categories, members] = await Promise.all([
     getAccounts(true),
     getCategories({ includeInactive: true }),
     getMembers(true),
   ]);
+
+  // A filter naming something that no longer exists (an old bookmark, a deleted category) is
+  // dropped and reported, the same as a bad date. Applied, it would empty the list while the
+  // dropdown, unable to show the value, read "All" — the list would look broken.
+  const known = {
+    kind: (v: string) => isTxnKind(v),
+    account: (v: string) => accounts.some((a) => a.id === v),
+    category: (v: string) => categories.some((c) => c.id === v),
+    member: (v: string) => v === SHARED || members.some((m) => m.id === v),
+  };
+  const ignored: string[] = [];
+  const active: Partial<Record<(typeof FILTER_KEYS)[number], string>> = {};
+  for (const k of FILTER_KEYS) {
+    const v = sp[k];
+    if (!v) continue;
+    if (k !== "q" && !known[k](v)) ignored.push(k);
+    else active[k] = v;
+  }
+  const kind = active.kind && isTxnKind(active.kind) ? active.kind : undefined;
+
+  const all = await getTransactions({
+    from: range.from,
+    to: range.to,
+    kinds: kind ? [kind] : undefined,
+    accountId: active.account,
+    categoryId: active.category,
+    memberId: active.member,
+    search: active.q,
+  });
 
   const shown = all.slice(0, SHOW_AT_MOST);
   const income = all.filter((t) => t.kind === "INCOME").reduce((a, t) => a + t.amountCents, 0);
@@ -60,7 +81,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
   // The current filters without the window, for the chip links; with it, for export.
   const filters = new URLSearchParams();
-  for (const k of FILTER_KEYS) if (sp[k]) filters.set(k, sp[k]!);
+  for (const k of FILTER_KEYS) if (active[k]) filters.set(k, active[k]!);
   const chipHref = (key: string) => {
     const p = new URLSearchParams(filters);
     p.set("range", key);
@@ -105,6 +126,12 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         {sp.deleted === "1" && <Notice tone="ok">Deleted. It no longer counts towards any balance or report.</Notice>}
         {sp.deleted === "missing" && <Notice tone="warn">That entry was already deleted.</Notice>}
         {sp.deleted === "failed" && <Notice tone="warn">Nothing was deleted: the request did not say which entry.</Notice>}
+        {ignored.length > 0 && (
+          <Notice tone="warn">
+            The {ignored.join(" and ")} filter in this link no longer matches anything (it may have
+            been deleted), so it was left out.
+          </Notice>
+        )}
         {badDates.length > 0 && (
           <Notice tone="warn">
             {badDates.join(" and ")} {badDates.length > 1 ? "are not dates" : "is not a date"}, so it was
@@ -140,7 +167,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             </option>
           ))}
         </select>
-        <select name="account" className="select" defaultValue={sp.account ?? ""} aria-label="Account">
+        <select name="account" className="select" defaultValue={active.account ?? ""} aria-label="Account">
           <option value="">All accounts</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
@@ -149,7 +176,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             </option>
           ))}
         </select>
-        <select name="category" className="select" defaultValue={sp.category ?? ""} aria-label="Category">
+        <select name="category" className="select" defaultValue={active.category ?? ""} aria-label="Category">
           <option value="">All categories</option>
           {(["EXPENSE", "INCOME"] as const).map((k) => (
             <optgroup key={k} label={KIND_LABELS[k]}>
@@ -163,7 +190,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             </optgroup>
           ))}
         </select>
-        <select name="member" className="select" defaultValue={sp.member ?? ""} aria-label="Member">
+        <select name="member" className="select" defaultValue={active.member ?? ""} aria-label="Member">
           <option value="">Everyone</option>
           <option value={SHARED}>Shared only</option>
           {members.map((m) => (
@@ -207,7 +234,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         ) : (
           <div className="divide-line list-long">
             {shown.map((t) => (
-              <TxnRow key={t.id} t={t} viewingAccountId={sp.account || undefined} />
+              <TxnRow key={t.id} t={t} viewingAccountId={active.account} />
             ))}
           </div>
         )}

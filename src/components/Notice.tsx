@@ -2,9 +2,9 @@
  * A one-line result banner, for telling someone what just happened after a redirect.
  *
  * Server actions here finish by redirecting, which loses any state they might have returned.
- * The outcome travels as a query parameter instead and gets rendered on arrival — otherwise
- * saving, settling up and deleting all complete in silence, and "did that work?" is only
- * answerable by hunting through the list.
+ * The outcome travels as a query parameter instead and gets rendered on arrival. Otherwise
+ * saving, adjusting a balance, updating a value and deleting would all complete in silence,
+ * and "did that work?" would only be answerable by hunting through the list.
  */
 export function Notice({
   tone,

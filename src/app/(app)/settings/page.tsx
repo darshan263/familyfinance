@@ -5,13 +5,20 @@ import { formatRelative } from "@/lib/date";
 import { prisma } from "@/lib/db";
 import { getHouseholdName, getRecentActivity } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
-import { addCategory, removeCategory, renameCategory, renameHousehold } from "./actions";
+import {
+  addCategory,
+  removeCategory,
+  renameCategory,
+  renameHousehold,
+  signOutOtherDevices,
+} from "./actions";
 import { PasswordForm } from "./PasswordForm";
 
 export const dynamic = "force-dynamic";
 
 const SAVED: Record<string, string> = {
   household: "Household name saved.",
+  devices: "Every other device has been signed out. This one stays signed in.",
   category: "Category saved.",
   archived: "Category archived. Its entries keep it; it is no longer offered for new ones.",
   deleted: "Category deleted.",
@@ -34,7 +41,7 @@ export default async function SettingsPage({
     requireUser(),
     getHouseholdName(),
     prisma.category.findMany({
-      include: { _count: { select: { transactions: true } } },
+      include: { _count: { select: { transactions: { where: { deletedAt: null } } } } },
       orderBy: [{ kind: "asc" }, { sort: "asc" }, { name: "asc" }],
     }),
     getRecentActivity(15),
@@ -63,6 +70,16 @@ export default async function SettingsPage({
           Signed in as {user.email}. This is the only login, so keep the password somewhere safe.
         </p>
         <PasswordForm />
+        <form action={signOutOtherDevices} className="mt-5 border-t pt-4">
+          <p className="mb-2 text-sm" style={{ color: "var(--text-muted)" }}>
+            Lost a phone, or signed in on a computer that is not yours? This signs out every
+            other device without changing the password. Everyone sharing the login will need to
+            sign in again.
+          </p>
+          <button className="btn btn-secondary btn-sm" type="submit">
+            Sign out all other devices
+          </button>
+        </form>
       </section>
 
       <section className="card p-5">

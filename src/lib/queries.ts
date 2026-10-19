@@ -1,8 +1,7 @@
 import "server-only";
 
-import type { Prisma } from "@prisma/client";
-
 import {
+  bucketMonthly,
   computePositions,
   sumNetWorth,
   type AccountLite,
@@ -11,8 +10,8 @@ import {
 } from "./balances";
 import { endOfDay } from "./date";
 import { prisma } from "./db";
+import { whereFromFilter, type TxnFilter } from "./filters";
 import { sumToPaise } from "./money";
-import type { TxnKind } from "./txn";
 
 export const SETTING_KEYS = {
   householdName: "household.name",
@@ -58,36 +57,7 @@ export async function getCategories(opts: { kind?: "EXPENSE" | "INCOME"; include
   });
 }
 
-/** `memberId: "shared"` means entries with no member. */
-export const SHARED = "shared";
-
-export interface TxnFilter {
-  from?: Date;
-  to?: Date;
-  kinds?: TxnKind[];
-  /** Entries that touch this account, from either side of a transfer. */
-  accountId?: string;
-  categoryId?: string;
-  memberId?: string;
-  search?: string;
-}
-
-function whereFromFilter(filter: TxnFilter): Prisma.TransactionWhereInput {
-  const where: Prisma.TransactionWhereInput = { deletedAt: null };
-  if (filter.from || filter.to) {
-    where.date = {
-      ...(filter.from ? { gte: filter.from } : {}),
-      ...(filter.to ? { lte: filter.to } : {}),
-    };
-  }
-  if (filter.kinds?.length) where.kind = { in: filter.kinds };
-  if (filter.accountId) {
-    where.OR = [{ accountId: filter.accountId }, { toAccountId: filter.accountId }];
-  }
-  if (filter.categoryId) where.categoryId = filter.categoryId;
-  if (filter.memberId) where.memberId = filter.memberId === SHARED ? null : filter.memberId;
-  return where;
-}
+export { SHARED, type TxnFilter } from "./filters";
 
 /**
  * Text search runs here rather than in the query. Postgres `contains` is case-sensitive
@@ -136,8 +106,7 @@ export async function getLedgerInputs() {
       select: { kind: true, amountCents: true, accountId: true, toAccountId: true, date: true },
     }),
     prisma.valuation.findMany({
-      select: { accountId: true, date: true, valueCents: true },
-      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      select: { accountId: true, date: true, valueCents: true, createdAt: true },
     }),
   ]);
   const accountsLite: AccountLite[] = accounts;
@@ -234,16 +203,7 @@ export async function monthlyIncomeExpense(months: { start: Date; end: Date }[])
     }),
     select: { kind: true, amountCents: true, date: true },
   });
-  return months.map(({ start, end }) => {
-    let income = 0;
-    let expense = 0;
-    for (const r of rows) {
-      if (r.date < start || r.date > end) continue;
-      if (r.kind === "INCOME") income += r.amountCents;
-      else expense += r.amountCents;
-    }
-    return { start, income, expense };
-  });
+  return bucketMonthly(rows, months);
 }
 
 export async function getEarliestEntryDate(): Promise<Date | null> {
@@ -255,8 +215,18 @@ export async function getEarliestEntryDate(): Promise<Date | null> {
   return row?.date ?? null;
 }
 
-export async function logActivity(action: string, summary: string) {
-  await prisma.activity.create({ data: { action, summary } });
+/**
+ * Record a change in the audit trail. Best-effort, and deliberately so: it runs after the
+ * change itself has been written, and a failure here must not show "Something went wrong" for
+ * a save that succeeded — after a password change that would leave someone believing the old
+ * password still works. A failure is logged for whoever reads the server logs.
+ */
+export async function logActivity(action: string, summary: string): Promise<void> {
+  try {
+    await prisma.activity.create({ data: { action, summary } });
+  } catch (err) {
+    console.error(`[familyfinance] could not record activity "${summary}":`, err);
+  }
 }
 
 export async function getRecentActivity(take = 20) {
